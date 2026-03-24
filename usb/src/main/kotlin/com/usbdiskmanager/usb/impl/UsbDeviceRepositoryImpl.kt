@@ -152,6 +152,7 @@ class UsbDeviceRepositoryImpl @Inject constructor(
                 updateDeviceMountState(deviceId, mountInfo.mountPoint, true)
                 val (total, free) = getSpaceInfo(mountInfo.mountPoint)
                 updateDeviceSpaceInfo(deviceId, total, free, mountInfo.fsType)
+                createAppDirectoriesOnDevice(mountInfo.mountPoint)
                 DiskOperationResult.Success(
                     "Monté sur ${mountInfo.mountPoint} — " +
                     "Total: ${formatBytes(total)}, Libre: ${formatBytes(free)}"
@@ -271,6 +272,10 @@ class UsbDeviceRepositoryImpl @Inject constructor(
         val mountPoint = mountInfo?.mountPoint
         val (total, free) = getSpaceInfo(mountPoint)
         val fsType = mountInfo?.fsType?.let { normalizeFsType(it) }
+
+        if (mountPoint != null) {
+            createAppDirectoriesOnDevice(mountPoint)
+        }
 
         return DiskDevice(
             id = id,
@@ -472,6 +477,34 @@ class UsbDeviceRepositoryImpl @Inject constructor(
             "NTFS" -> "mkfs.ntfs --fast $labelFlag $blockDevice"
             "EXT4" -> "mkfs.ext4 $labelFlag $blockDevice"
             else -> "mkfs.vfat -F 32 $blockDevice"
+        }
+    }
+
+    // ─── App directory setup ──────────────────────────────────────────────────
+
+    /**
+     * Creates the app's own folder structure at the root of the USB drive.
+     * This gives the app a dedicated space on the device, visible to the user.
+     * Folders created:
+     *   {mountPoint}/UsbDiskManager/          ← app root on device
+     *   {mountPoint}/UsbDiskManager/Logs/     ← log exports
+     *   {mountPoint}/UsbDiskManager/Backups/  ← future use
+     */
+    private fun createAppDirectoriesOnDevice(mountPoint: String) {
+        try {
+            val appDir = File(mountPoint, "UsbDiskManager")
+            val logsDir = File(appDir, "Logs")
+            val backupsDir = File(appDir, "Backups")
+
+            if (appDir.mkdirs() || appDir.exists()) {
+                logsDir.mkdirs()
+                backupsDir.mkdirs()
+                Timber.d("App directories created at: ${appDir.absolutePath}")
+            } else {
+                Timber.w("Could not create app directory at: ${appDir.absolutePath}")
+            }
+        } catch (e: Exception) {
+            Timber.w("App dir creation failed (read-only or no perms): ${e.message}")
         }
     }
 
