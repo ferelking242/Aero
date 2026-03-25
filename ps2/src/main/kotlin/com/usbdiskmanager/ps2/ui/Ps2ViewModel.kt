@@ -4,16 +4,21 @@ import android.net.Uri
 import android.os.Environment
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.usbdiskmanager.ps2.data.IsoSearchService
 import com.usbdiskmanager.ps2.data.Ps2RepositoryImpl
 import com.usbdiskmanager.ps2.data.download.DownloadEngine
 import com.usbdiskmanager.ps2.data.scanner.IsoScanner
+import com.usbdiskmanager.ps2.data.transfer.UsbGameTransferManager
 import com.usbdiskmanager.ps2.domain.model.ConversionJob
 import com.usbdiskmanager.ps2.domain.model.ConversionProgress
 import com.usbdiskmanager.ps2.domain.model.DownloadStatus
+import com.usbdiskmanager.ps2.domain.model.IsoSearchResult
 import com.usbdiskmanager.ps2.domain.model.OutputDestination
 import com.usbdiskmanager.ps2.domain.model.Ps2Download
 import com.usbdiskmanager.ps2.domain.model.Ps2Game
+import com.usbdiskmanager.ps2.domain.model.UsbGame
 import com.usbdiskmanager.ps2.domain.repository.Ps2Repository
+import com.usbdiskmanager.ps2.ui.transfer.UsbTransferUiState
 import com.usbdiskmanager.ps2.util.FilesystemChecker
 import com.usbdiskmanager.ps2.util.MountInfo
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -47,7 +52,16 @@ data class Ps2UiState(
     val showFat32Warning: Boolean = false,
     val fat32WarningMount: MountInfo? = null,
     val pendingBatchConversion: Boolean = false,
-    val downloads: List<Ps2Download> = emptyList()
+    val downloads: List<Ps2Download> = emptyList(),
+    // Transfer
+    val transferState: UsbTransferUiState = UsbTransferUiState(),
+    // ISO Search
+    val isoSearchQuery: String = "",
+    val isoSearchResults: List<IsoSearchResult> = emptyList(),
+    val isoSearchLoading: Boolean = false,
+    val isoSearchError: String? = null,
+    val resolvedDownload: IsoSearchResult? = null,
+    val resolvingId: String? = null
 ) {
     val filteredGames: List<Ps2Game>
         get() {
@@ -69,14 +83,16 @@ data class Ps2UiState(
 
 enum class SortMode { TITLE, SIZE, STATUS }
 
-enum class Ps2Tab { GAMES, MERGE_CFG, DOWNLOAD }
+enum class Ps2Tab { GAMES, MERGE_CFG, DOWNLOAD, TRANSFER }
 
 @HiltViewModel
 class Ps2ViewModel @Inject constructor(
     private val repository: Ps2Repository,
     private val repositoryImpl: Ps2RepositoryImpl,
     private val fsChecker: FilesystemChecker,
-    private val downloadEngine: DownloadEngine
+    private val downloadEngine: DownloadEngine,
+    private val transferManager: UsbGameTransferManager,
+    private val searchService: IsoSearchService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(Ps2UiState())
@@ -84,6 +100,7 @@ class Ps2ViewModel @Inject constructor(
 
     private val activeConversionJobs = mutableMapOf<String, Job>()
     private val activeDownloadJobs = mutableMapOf<String, Job>()
+    private val activeTransferJobs = mutableMapOf<String, Job>()
 
     init {
         repository.games.onEach { games ->
@@ -155,6 +172,149 @@ class Ps2ViewModel @Inject constructor(
         }
     }
 
+    // ── Transfer: scan ──────────────────────────────────────────────────────
+
+    fun refreshTransferGames() {
+        viewModelScope.launch {
+            _uiState.update { s -> s.copy(transferState = s.transferState.copy(isLoading = true)) }
+            try {
+                val mounts = fsChecker.listExternalMounts()
+                _uiState.update { it.copy(availableUsbMounts = mounts) }
+
+                val usbGamesMap = mutableMapOf<String, List<UsbGame>>()
+                for (mount in mounts) {
+                    usbGamesMap[mount.mountPoint] = transferManager.listGamesOnMount(mount.mountPoint)
+                }
+
+                // List internal UL games (read ul.cfg from DEFAULT_UL_DIR)
+                val internalGames = transferManager.listGamesOnMount(IsoScanner.DEFAULT_UL_DIR)
+                    .map { it.copy(mountPoint = IsoScanner.DEFAULT_UL_DIR) }
+
+                _uiState.update { s ->
+                    s.copy(
+                        transferState = s.transferState.copy(
+                            isLoading = false,
+                            usbGames = usbGamesMap,
+                            internalGames = internalGames,
+                            error = null
+                        )
+                    )
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "refreshTransferGames failed")
+                _uiState.update { s ->
+                    s.copy(
+                        transferState = s.transferState.copy(
+                            isLoading = false,
+                            error = e.message
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    fun transferUsbToInternal(game: UsbGame) {
+        if (activeTransferJobs.containsKey(game.gameId)) return
+        val job = transferManager.copyToInternal(game)
+            .onEach { progress ->
+                _uiState.update { s ->
+                    s.copy(transferState = s.transferState.copy(
+                        activeTransfers = s.transferState.activeTransfers + (game.gameId to progress)
+                    ))
+                }
+                if (progress.isDone) {
+                    activeTransferJobs.remove(game.gameId)
+                    scan()
+                }
+            }
+            .catch { e ->
+                Timber.e(e, "USB→Internal transfer error: ${game.gameId}")
+                activeTransferJobs.remove(game.gameId)
+            }
+            .launchIn(viewModelScope)
+        activeTransferJobs[game.gameId] = job
+    }
+
+    fun transferInternalToUsb(game: UsbGame, toMount: String) {
+        if (activeTransferJobs.containsKey(game.gameId)) return
+        val job = transferManager.copyFromInternalToUsb(game, toMount)
+            .onEach { progress ->
+                _uiState.update { s ->
+                    s.copy(transferState = s.transferState.copy(
+                        activeTransfers = s.transferState.activeTransfers + (game.gameId to progress)
+                    ))
+                }
+                if (progress.isDone) activeTransferJobs.remove(game.gameId)
+            }
+            .catch { e ->
+                Timber.e(e, "Internal→USB transfer error: ${game.gameId}")
+                activeTransferJobs.remove(game.gameId)
+            }
+            .launchIn(viewModelScope)
+        activeTransferJobs[game.gameId] = job
+    }
+
+    fun transferUsbToUsb(game: UsbGame, toMount: String) {
+        if (activeTransferJobs.containsKey(game.gameId)) return
+        val job = transferManager.directUsbToUsb(game, toMount)
+            .onEach { progress ->
+                _uiState.update { s ->
+                    s.copy(transferState = s.transferState.copy(
+                        activeTransfers = s.transferState.activeTransfers + (game.gameId to progress)
+                    ))
+                }
+                if (progress.isDone) activeTransferJobs.remove(game.gameId)
+            }
+            .catch { e ->
+                Timber.e(e, "USB→USB transfer error: ${game.gameId}")
+                activeTransferJobs.remove(game.gameId)
+            }
+            .launchIn(viewModelScope)
+        activeTransferJobs[game.gameId] = job
+    }
+
+    // ── ISO Search (archive.org) ─────────────────────────────────────────────
+
+    fun searchIso(query: String) {
+        if (query.isBlank()) {
+            _uiState.update { it.copy(isoSearchResults = emptyList(), isoSearchError = null) }
+            return
+        }
+        _uiState.update { it.copy(isoSearchLoading = true, isoSearchError = null, isoSearchQuery = query) }
+        viewModelScope.launch {
+            try {
+                val results = searchService.search(query)
+                _uiState.update { it.copy(isoSearchResults = results, isoSearchLoading = false) }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isoSearchLoading = false,
+                    isoSearchError = "Erreur réseau: ${e.message}") }
+            }
+        }
+    }
+
+    fun resolveAndDownload(result: IsoSearchResult) {
+        _uiState.update { it.copy(resolvingId = result.identifier) }
+        viewModelScope.launch {
+            try {
+                val resolved = searchService.resolveDownloadUrl(result.identifier)
+                if (resolved != null && resolved.downloadUrl.isNotBlank()) {
+                    _uiState.update { it.copy(resolvingId = null) }
+                    addDownload(resolved.downloadUrl, resolved.fileName.ifBlank { "${result.title}.iso" })
+                } else {
+                    _uiState.update { it.copy(resolvingId = null,
+                        isoSearchError = "Aucun fichier ISO trouvé pour '${result.title}'") }
+                }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(resolvingId = null,
+                    isoSearchError = "Impossible de résoudre le lien: ${e.message}") }
+            }
+        }
+    }
+
+    fun setIsoSearchQuery(q: String) = _uiState.update { it.copy(isoSearchQuery = q) }
+    fun clearIsoSearch() = _uiState.update { it.copy(isoSearchResults = emptyList(), isoSearchQuery = "", isoSearchError = null) }
+
     // ── Multi-select ────────────────────────────────────────────────────────
 
     fun toggleMultiSelectMode() {
@@ -195,7 +355,6 @@ class Ps2ViewModel @Inject constructor(
         _uiState.update { it.copy(pendingDestination = dest) }
     }
 
-    // Called when user clicks "Convertir" on a single game — opens the dialog
     fun selectGame(game: Ps2Game?) {
         _uiState.update { it.copy(selectedGame = game, showConvertDialog = game != null) }
     }
@@ -211,10 +370,6 @@ class Ps2ViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Called when user confirms the destination in the dialog and clicks Démarrer.
-     * If destination is USB and not FAT32, shows a warning first.
-     */
     fun requestConversionWithDest(destination: OutputDestination) {
         val state = _uiState.value
         _uiState.update { it.copy(pendingDestination = destination) }
@@ -226,10 +381,7 @@ class Ps2ViewModel @Inject constructor(
                     val mountInfo = state.availableUsbMounts
                         .firstOrNull { it.mountPoint == destination.mountPoint }
                     _uiState.update {
-                        it.copy(
-                            showFat32Warning = true,
-                            fat32WarningMount = mountInfo
-                        )
+                        it.copy(showFat32Warning = true, fat32WarningMount = mountInfo)
                     }
                     return
                 }
@@ -239,7 +391,6 @@ class Ps2ViewModel @Inject constructor(
         }
     }
 
-    /** User acknowledged FAT32 warning and wants to proceed anyway */
     fun proceedDespiteFat32Warning() {
         _uiState.update { it.copy(showFat32Warning = false, fat32WarningMount = null) }
         proceedWithConversion()
@@ -265,22 +416,16 @@ class Ps2ViewModel @Inject constructor(
     }
 
     private fun startBatchConversion(games: List<Ps2Game>, dest: OutputDestination) {
-        val outputDir = dest.resolvedPath(IsoScanner.DEFAULT_UL_DIR)
-        games.forEach { game ->
-            startConversionInternal(game, dest)
-        }
+        games.forEach { game -> startConversionInternal(game, dest) }
         _uiState.update { it.copy(isMultiSelectMode = false, multiSelectedIds = emptySet()) }
     }
 
     private fun startConversionInternal(game: Ps2Game, destination: OutputDestination) {
         val isoPath = game.isoPath
         if (activeConversionJobs.containsKey(isoPath)) return
-
         val outputDir = destination.resolvedPath(IsoScanner.DEFAULT_UL_DIR)
 
-        viewModelScope.launch {
-            repositoryImpl.createJob(isoPath, outputDir)
-        }
+        viewModelScope.launch { repositoryImpl.createJob(isoPath, outputDir) }
 
         val job = repository.convertToUl(isoPath, outputDir)
             .onEach { progress ->
@@ -334,7 +479,6 @@ class Ps2ViewModel @Inject constructor(
                 activeConversionJobs.remove(isoPath)
             }
             .launchIn(viewModelScope)
-
         activeConversionJobs[isoPath] = job
     }
 
@@ -357,6 +501,20 @@ class Ps2ViewModel @Inject constructor(
         }
     }
 
+    fun fetchAllCovers() {
+        viewModelScope.launch {
+            _uiState.value.games.forEach { game ->
+                if (game.coverPath == null) {
+                    try {
+                        repository.fetchCoverArt(game.gameId, game.region, IsoScanner.DEFAULT_ART_DIR)
+                    } catch (e: Exception) {
+                        Timber.w(e, "fetchAllCovers: skipped ${game.gameId}")
+                    }
+                }
+            }
+        }
+    }
+
     // ── Download manager ─────────────────────────────────────────────────────
 
     fun addDownload(url: String, customFileName: String? = null) {
@@ -372,11 +530,9 @@ class Ps2ViewModel @Inject constructor(
         val job = downloadEngine.download(item)
             .onEach { updated ->
                 _uiState.update { state ->
-                    state.copy(
-                        downloads = state.downloads.map {
-                            if (it.id == updated.id) updated else it
-                        }
-                    )
+                    state.copy(downloads = state.downloads.map {
+                        if (it.id == updated.id) updated else it
+                    })
                 }
                 if (updated.status == DownloadStatus.COMPLETED) {
                     activeDownloadJobs.remove(item.id)
@@ -387,16 +543,13 @@ class Ps2ViewModel @Inject constructor(
                 Timber.e(e, "Download error: ${item.url}")
                 _uiState.update { state ->
                     state.copy(downloads = state.downloads.map {
-                        if (it.id == item.id) it.copy(
-                            status = DownloadStatus.ERROR,
-                            errorMessage = e.message
-                        ) else it
+                        if (it.id == item.id) it.copy(status = DownloadStatus.ERROR, errorMessage = e.message)
+                        else it
                     })
                 }
                 activeDownloadJobs.remove(item.id)
             }
             .launchIn(viewModelScope)
-
         activeDownloadJobs[item.id] = job
     }
 
@@ -437,6 +590,9 @@ class Ps2ViewModel @Inject constructor(
 
     fun setSearch(query: String) = _uiState.update { it.copy(searchQuery = query) }
     fun setSortMode(mode: SortMode) = _uiState.update { it.copy(sortMode = mode) }
-    fun setTab(tab: Ps2Tab) = _uiState.update { it.copy(selectedTab = tab) }
+    fun setTab(tab: Ps2Tab) {
+        _uiState.update { it.copy(selectedTab = tab) }
+        if (tab == Ps2Tab.TRANSFER) refreshTransferGames()
+    }
     fun clearError() = _uiState.update { it.copy(errorMessage = null) }
 }

@@ -1,6 +1,7 @@
 package com.usbdiskmanager.ps2.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -18,11 +19,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
 import com.usbdiskmanager.ps2.domain.model.DownloadStatus
+import com.usbdiskmanager.ps2.domain.model.IsoSearchResult
 import com.usbdiskmanager.ps2.domain.model.Ps2Download
 
 @Composable
@@ -30,163 +34,330 @@ fun Ps2DownloadScreen(viewModel: Ps2ViewModel) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val focusManager = LocalFocusManager.current
 
+    var showManualInput by remember { mutableStateOf(false) }
     var urlInput by remember { mutableStateOf("") }
     var fileNameInput by remember { mutableStateOf("") }
-    var showAddForm by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Info banner
-        Surface(
-            color = MaterialTheme.colorScheme.secondaryContainer,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(
-                modifier = Modifier.padding(12.dp, 10.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.Top
+
+        // ── Search bar (archive.org) ──
+        Surface(color = MaterialTheme.colorScheme.surface) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Icon(
-                    Icons.Default.Info,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                    modifier = Modifier.size(18.dp).padding(top = 1.dp)
+                // Info badge
+                Surface(
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.CloudDownload, null,
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.size(14.dp))
+                        Text(
+                            "Recherche via Internet Archive (archive.org) — bibliothèque de préservation numérique publique",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            fontSize = 10.sp
+                        )
+                    }
+                }
+
+                // Search field
+                OutlinedTextField(
+                    value = uiState.isoSearchQuery,
+                    onValueChange = viewModel::setIsoSearchQuery,
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("Rechercher un jeu PS2... ex: \"God of War\"") },
+                    leadingIcon = { Icon(Icons.Default.Search, null) },
+                    trailingIcon = {
+                        if (uiState.isoSearchQuery.isNotBlank()) {
+                            if (uiState.isoSearchLoading) {
+                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            } else {
+                                IconButton(onClick = viewModel::clearIsoSearch) {
+                                    Icon(Icons.Default.Clear, null)
+                                }
+                            }
+                        }
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = {
+                        viewModel.searchIso(uiState.isoSearchQuery)
+                        focusManager.clearFocus()
+                    })
                 )
-                Text(
-                    "Gestionnaire de téléchargement. Entrez l'URL directe d'un fichier ISO. " +
-                    "La reprise automatique est supportée (HTTP Range). " +
-                    "Les fichiers téléchargés sont sauvegardés dans /usbdiskmanager/PS2Manager/ISO/",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer
-                )
+                Button(
+                    onClick = {
+                        viewModel.searchIso(uiState.isoSearchQuery)
+                        focusManager.clearFocus()
+                    },
+                    enabled = uiState.isoSearchQuery.isNotBlank() && !uiState.isoSearchLoading,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Icon(Icons.Default.Search, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Rechercher sur Internet Archive")
+                }
             }
         }
 
-        // Add download button / form
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+        HorizontalDivider()
+
+        LazyColumn(
+            contentPadding = PaddingValues(horizontal = 16.dp, top = 8.dp, bottom = 96.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.weight(1f)
         ) {
-            if (!showAddForm) {
-                Button(
-                    onClick = { showAddForm = true },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Ajouter un téléchargement")
-                }
-            } else {
-                Card(
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Text(
-                            "Nouveau téléchargement",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold
-                        )
-
-                        OutlinedTextField(
-                            value = urlInput,
-                            onValueChange = { urlInput = it },
-                            label = { Text("URL du fichier ISO") },
-                            placeholder = { Text("https://example.com/game.iso") },
-                            leadingIcon = { Icon(Icons.Default.Link, null) },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            shape = RoundedCornerShape(10.dp),
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next)
-                        )
-
-                        OutlinedTextField(
-                            value = fileNameInput,
-                            onValueChange = { fileNameInput = it },
-                            label = { Text("Nom du fichier (optionnel)") },
-                            placeholder = { Text("MonJeu.iso") },
-                            leadingIcon = { Icon(Icons.Default.DriveFileRenameOutline, null) },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            shape = RoundedCornerShape(10.dp),
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                            keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
-                        )
-
+            // ── Search error ──
+            uiState.isoSearchError?.let { err ->
+                item {
+                    Surface(color = MaterialTheme.colorScheme.errorContainer, shape = RoundedCornerShape(10.dp)) {
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
+                            modifier = Modifier.padding(12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            OutlinedButton(onClick = {
-                                showAddForm = false
-                                urlInput = ""
-                                fileNameInput = ""
-                            }) { Text("Annuler") }
+                            Icon(Icons.Default.Error, null, tint = MaterialTheme.colorScheme.onErrorContainer,
+                                modifier = Modifier.size(18.dp))
+                            Text(err, style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer)
+                        }
+                    }
+                }
+            }
 
-                            Button(
-                                onClick = {
-                                    if (urlInput.isNotBlank()) {
-                                        viewModel.addDownload(urlInput.trim(), fileNameInput.trim().takeIf { it.isNotBlank() })
-                                        showAddForm = false
-                                        urlInput = ""
-                                        fileNameInput = ""
-                                        focusManager.clearFocus()
-                                    }
-                                },
-                                enabled = urlInput.isNotBlank()
-                            ) {
-                                Icon(Icons.Default.Download, null, modifier = Modifier.size(16.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text("Télécharger")
+            // ── Search results ──
+            if (uiState.isoSearchResults.isNotEmpty()) {
+                item {
+                    Row(verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.padding(vertical = 4.dp)) {
+                        Icon(Icons.Default.Archive, null, tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp))
+                        Text("${uiState.isoSearchResults.size} résultat(s) — Internet Archive",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                items(uiState.isoSearchResults, key = { it.identifier }) { result ->
+                    SearchResultCard(
+                        result = result,
+                        isResolving = uiState.resolvingId == result.identifier,
+                        onDownload = { viewModel.resolveAndDownload(result) }
+                    )
+                }
+            } else if (!uiState.isoSearchLoading && uiState.isoSearchQuery.isBlank()) {
+                item {
+                    SearchEmptyHint()
+                }
+            }
+
+            // ── Active downloads ──
+            if (uiState.downloads.isNotEmpty()) {
+                item {
+                    Row(
+                        modifier = Modifier.padding(top = 8.dp, bottom = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(Icons.Default.Download, null, tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp))
+                        Text("Téléchargements", style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+
+                items(uiState.downloads, key = { it.id }) { download ->
+                    DownloadCard(
+                        download = download,
+                        onPause = { viewModel.pauseDownload(download.id) },
+                        onResume = { viewModel.resumeDownload(download.id) },
+                        onRetry = { viewModel.retryDownload(download.id) },
+                        onRemove = { viewModel.removeDownload(download.id) }
+                    )
+                }
+            }
+
+            // ── Manual URL input (collapsible) ──
+            item {
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().clickable { showManualInput = !showManualInput },
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Link, null, modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("URL directe", style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold)
+                            }
+                            Icon(if (showManualInput) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                null, modifier = Modifier.size(20.dp))
+                        }
+                        AnimatedVisibility(visible = showManualInput) {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedTextField(
+                                    value = urlInput,
+                                    onValueChange = { urlInput = it },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    label = { Text("URL du fichier ISO/7z") },
+                                    placeholder = { Text("https://...") },
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+                                OutlinedTextField(
+                                    value = fileNameInput,
+                                    onValueChange = { fileNameInput = it },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    label = { Text("Nom du fichier (optionnel)") },
+                                    placeholder = { Text("MonJeu.iso") },
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+                                Button(
+                                    onClick = {
+                                        if (urlInput.isNotBlank()) {
+                                            viewModel.addDownload(urlInput, fileNameInput)
+                                            urlInput = ""
+                                            fileNameInput = ""
+                                            focusManager.clearFocus()
+                                        }
+                                    },
+                                    enabled = urlInput.isNotBlank(),
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Ajouter le téléchargement")
+                                }
                             }
                         }
                     }
                 }
             }
         }
+    }
+}
 
-        // Download list
-        if (uiState.downloads.isEmpty()) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Icon(
-                        Icons.Default.DownloadForOffline,
-                        contentDescription = null,
-                        modifier = Modifier.size(64.dp),
-                        tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
-                    )
-                    Text(
-                        "Aucun téléchargement en cours",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.outline
-                    )
+@Composable
+private fun SearchResultCard(
+    result: IsoSearchResult,
+    isResolving: Boolean,
+    onDownload: () -> Unit
+) {
+    Card(
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            // Thumbnail from archive.org
+            if (result.coverUrl.isNotBlank()) {
+                AsyncImage(
+                    model = result.coverUrl,
+                    contentDescription = result.title,
+                    modifier = Modifier
+                        .size(width = 52.dp, height = 68.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                )
+            } else {
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    shape = RoundedCornerShape(6.dp),
+                    modifier = Modifier.size(width = 52.dp, height = 68.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                        Icon(Icons.Default.VideogameAsset, null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                            modifier = Modifier.size(24.dp))
+                    }
                 }
             }
-        } else {
-            LazyColumn(
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.fillMaxSize()
-            ) {
-                items(items = uiState.downloads, key = { it.id }) { dl ->
-                    DownloadCard(
-                        download = dl,
-                        onPause = { viewModel.pauseDownload(dl.id) },
-                        onResume = { viewModel.resumeDownload(dl.id) },
-                        onCancel = { viewModel.removeDownload(dl.id) },
-                        onRetry = { viewModel.retryDownload(dl.id) }
-                    )
+
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(result.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold,
+                    maxLines = 2, overflow = TextOverflow.Ellipsis)
+
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (result.region.isNotBlank()) {
+                        Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(4.dp)) {
+                            Text(result.region, style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
+                                color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        }
+                    }
+                    Text("archive.org", style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline, fontSize = 10.sp)
+                }
+
+                if (result.description.isNotBlank()) {
+                    Text(result.description, style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2, overflow = TextOverflow.Ellipsis, fontSize = 11.sp)
+                }
+
+                Spacer(Modifier.height(2.dp))
+                Button(
+                    onClick = onDownload,
+                    enabled = !isResolving,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    if (isResolving) {
+                        CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary)
+                        Spacer(Modifier.width(6.dp))
+                        Text("Résolution...", style = MaterialTheme.typography.labelSmall)
+                    } else {
+                        Icon(Icons.Default.Download, null, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Télécharger", style = MaterialTheme.typography.labelSmall)
+                    }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SearchEmptyHint() {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Icon(Icons.Default.Search, null, modifier = Modifier.size(48.dp),
+            tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+        Text("Recherchez un jeu PS2 pour le télécharger",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center)
+        Text("Les résultats proviennent d'Internet Archive,\nune bibliothèque de préservation numérique légale.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.outline,
+            textAlign = TextAlign.Center, fontSize = 11.sp)
     }
 }
 
@@ -195,200 +366,82 @@ private fun DownloadCard(
     download: Ps2Download,
     onPause: () -> Unit,
     onResume: () -> Unit,
-    onCancel: () -> Unit,
-    onRetry: () -> Unit
+    onRetry: () -> Unit,
+    onRemove: () -> Unit
 ) {
-    Card(
-        shape = RoundedCornerShape(14.dp),
-        elevation = CardDefaults.cardElevation(3.dp),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                // Status icon
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(statusColor(download.status).copy(alpha = 0.15f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = when (download.status) {
-                            DownloadStatus.QUEUED       -> Icons.Default.Pending
-                            DownloadStatus.DOWNLOADING  -> Icons.Default.Download
-                            DownloadStatus.PAUSED       -> Icons.Default.Pause
-                            DownloadStatus.COMPLETED    -> Icons.Default.CheckCircle
-                            DownloadStatus.ERROR        -> Icons.Default.Error
-                            DownloadStatus.CANCELLED    -> Icons.Default.Cancel
-                        },
-                        contentDescription = null,
-                        tint = statusColor(download.status),
-                        modifier = Modifier.size(22.dp)
-                    )
+    Card(shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                val (icon, iconTint) = when (download.status) {
+                    DownloadStatus.DOWNLOADING -> Icons.Default.Downloading to MaterialTheme.colorScheme.primary
+                    DownloadStatus.COMPLETED   -> Icons.Default.CheckCircle to Color(0xFF4CAF50)
+                    DownloadStatus.PAUSED      -> Icons.Default.PauseCircle to MaterialTheme.colorScheme.tertiary
+                    DownloadStatus.ERROR       -> Icons.Default.Error to MaterialTheme.colorScheme.error
+                    else                       -> Icons.Default.HourglassEmpty to MaterialTheme.colorScheme.outline
                 }
-
+                Icon(icon, null, tint = iconTint, modifier = Modifier.size(22.dp))
                 Column(modifier = Modifier.weight(1f)) {
+                    Text(download.fileName, style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(
-                        text = download.fileName,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = statusLabel(download),
+                        buildString {
+                            append(formatSizeDown(download.downloadedBytes))
+                            if (download.totalBytes > 0) append(" / ${formatSizeDown(download.totalBytes)}")
+                            val speedKb = download.speedBps.toLong()
+                            if (speedKb > 0) append("  •  ${formatSizeDown(speedKb.toLong())}/s")
+                        },
                         style = MaterialTheme.typography.labelSmall,
-                        color = statusColor(download.status)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                }
-
-                // Actions
-                Row {
-                    when (download.status) {
-                        DownloadStatus.DOWNLOADING -> {
-                            IconButton(onClick = onPause, modifier = Modifier.size(32.dp)) {
-                                Icon(Icons.Default.Pause, null, modifier = Modifier.size(18.dp))
-                            }
-                            IconButton(onClick = onCancel, modifier = Modifier.size(32.dp)) {
-                                Icon(Icons.Default.Close, null, modifier = Modifier.size(18.dp))
-                            }
-                        }
-                        DownloadStatus.PAUSED -> {
-                            IconButton(onClick = onResume, modifier = Modifier.size(32.dp)) {
-                                Icon(Icons.Default.PlayArrow, null, modifier = Modifier.size(18.dp))
-                            }
-                            IconButton(onClick = onCancel, modifier = Modifier.size(32.dp)) {
-                                Icon(Icons.Default.Delete, null, modifier = Modifier.size(18.dp))
-                            }
-                        }
-                        DownloadStatus.ERROR -> {
-                            IconButton(onClick = onRetry, modifier = Modifier.size(32.dp)) {
-                                Icon(Icons.Default.Refresh, null, modifier = Modifier.size(18.dp),
-                                    tint = MaterialTheme.colorScheme.primary)
-                            }
-                            IconButton(onClick = onCancel, modifier = Modifier.size(32.dp)) {
-                                Icon(Icons.Default.Delete, null, modifier = Modifier.size(18.dp))
-                            }
-                        }
-                        DownloadStatus.QUEUED -> {
-                            IconButton(onClick = onCancel, modifier = Modifier.size(32.dp)) {
-                                Icon(Icons.Default.Close, null, modifier = Modifier.size(18.dp))
-                            }
-                        }
-                        DownloadStatus.COMPLETED -> {
-                            IconButton(onClick = onCancel, modifier = Modifier.size(32.dp)) {
-                                Icon(Icons.Default.Delete, null, modifier = Modifier.size(18.dp),
-                                    tint = MaterialTheme.colorScheme.outline)
-                            }
-                        }
-                        else -> {}
+                    download.errorMessage?.let {
+                        Text(it, style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error, maxLines = 1)
                     }
+                }
+                // Actions
+                when (download.status) {
+                    DownloadStatus.DOWNLOADING ->
+                        IconButton(onClick = onPause, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.Pause, null, modifier = Modifier.size(18.dp))
+                        }
+                    DownloadStatus.PAUSED ->
+                        IconButton(onClick = onResume, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.PlayArrow, null, modifier = Modifier.size(18.dp))
+                        }
+                    DownloadStatus.ERROR ->
+                        IconButton(onClick = onRetry, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.Refresh, null, modifier = Modifier.size(18.dp))
+                        }
+                    else -> {}
+                }
+                IconButton(onClick = onRemove, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.Close, null, modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.outline)
                 }
             }
 
             // Progress bar
-            if (download.status == DownloadStatus.DOWNLOADING || download.status == DownloadStatus.PAUSED) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = buildString {
-                                append(formatBytes(download.downloadedBytes))
-                                if (download.totalBytes > 0) append(" / ${formatBytes(download.totalBytes)}")
-                            },
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        if (download.status == DownloadStatus.DOWNLOADING && download.speedBps > 0) {
-                            Text(
-                                text = "${formatSpeed(download.speedBps)}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
-                    if (download.totalBytes > 0) {
-                        LinearProgressIndicator(
-                            progress = { download.progress },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(6.dp)
-                                .clip(RoundedCornerShape(3.dp)),
-                            trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                        )
-                    } else {
-                        LinearProgressIndicator(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(6.dp)
-                                .clip(RoundedCornerShape(3.dp))
-                        )
-                    }
-                }
+            if (download.status == DownloadStatus.DOWNLOADING && download.totalBytes > 0) {
+                val progress = (download.downloadedBytes.toFloat() / download.totalBytes.toFloat()).coerceIn(0f, 1f)
+                LinearProgressIndicator(
+                    progress = { progress },
+                    modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+                    trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                )
+                Text("%.1f%%".format(progress * 100), style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary)
+            } else if (download.status == DownloadStatus.DOWNLOADING) {
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp))
+                )
             }
-
-            // Error message
-            download.errorMessage?.let { err ->
-                Surface(
-                    color = MaterialTheme.colorScheme.errorContainer,
-                    shape = RoundedCornerShape(6.dp)
-                ) {
-                    Text(
-                        text = err,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onErrorContainer,
-                        modifier = Modifier.padding(8.dp)
-                    )
-                }
-            }
-
-            // URL (truncated)
-            Text(
-                text = download.url,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.outline,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                fontSize = 10.sp
-            )
         }
     }
 }
 
-@Composable
-private fun statusColor(status: DownloadStatus): Color = when (status) {
-    DownloadStatus.QUEUED      -> MaterialTheme.colorScheme.secondary
-    DownloadStatus.DOWNLOADING -> MaterialTheme.colorScheme.primary
-    DownloadStatus.PAUSED      -> MaterialTheme.colorScheme.tertiary
-    DownloadStatus.COMPLETED   -> Color(0xFF4CAF50)
-    DownloadStatus.ERROR       -> MaterialTheme.colorScheme.error
-    DownloadStatus.CANCELLED   -> MaterialTheme.colorScheme.outline
-}
-
-private fun statusLabel(dl: Ps2Download): String = when (dl.status) {
-    DownloadStatus.QUEUED      -> "En file…"
-    DownloadStatus.DOWNLOADING -> if (dl.progress > 0) "%.1f%%".format(dl.progress * 100) else "Connexion…"
-    DownloadStatus.PAUSED      -> "En pause — %.1f%%".format(dl.progress * 100)
-    DownloadStatus.COMPLETED   -> "Terminé"
-    DownloadStatus.ERROR       -> "Erreur"
-    DownloadStatus.CANCELLED   -> "Annulé"
-}
-
-private fun formatBytes(bytes: Long): String = when {
+private fun formatSizeDown(bytes: Long): String = when {
     bytes >= 1_073_741_824L -> "%.1f Go".format(bytes / 1_073_741_824.0)
-    bytes >= 1_048_576L     -> "%.0f Mo".format(bytes / 1_048_576.0)
-    bytes >= 1_024L         -> "%.0f Ko".format(bytes / 1_024.0)
-    else                     -> "${bytes} o"
-}
-
-private fun formatSpeed(bps: Double): String = when {
-    bps >= 1_048_576 -> "%.1f Mo/s".format(bps / 1_048_576)
-    bps >= 1_024     -> "%.0f Ko/s".format(bps / 1_024)
-    else              -> "%.0f o/s".format(bps)
+    bytes >= 1_048_576L     -> "%.1f Mo".format(bytes / 1_048_576.0)
+    bytes >= 1024L          -> "%.0f Ko".format(bytes / 1024.0)
+    else                    -> "${bytes} o"
 }

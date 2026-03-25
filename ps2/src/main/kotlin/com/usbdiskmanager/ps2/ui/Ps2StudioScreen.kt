@@ -34,7 +34,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.usbdiskmanager.ps2.domain.model.ConversionStatus
 import com.usbdiskmanager.ps2.domain.model.OutputDestination
 import com.usbdiskmanager.ps2.ui.components.BatchConversionDialog
 import com.usbdiskmanager.ps2.ui.components.ConversionDialog
@@ -135,6 +134,9 @@ fun Ps2StudioScreen(
                                     )
                                 }
                             }
+                            IconButton(onClick = viewModel::fetchAllCovers) {
+                                Icon(Icons.Default.Image, contentDescription = "Récupérer toutes les pochettes")
+                            }
                             IconButton(onClick = { folderPickerLauncher.launch(null) }) {
                                 Icon(Icons.Default.FolderOpen, contentDescription = "Ajouter dossier")
                             }
@@ -177,6 +179,7 @@ fun Ps2StudioScreen(
                                         Ps2Tab.GAMES     -> "Jeux"
                                         Ps2Tab.MERGE_CFG -> "Fusionner CFG"
                                         Ps2Tab.DOWNLOAD  -> "Télécharger"
+                                        Ps2Tab.TRANSFER  -> "Transfert USB"
                                     },
                                     fontWeight = if (uiState.selectedTab == tab)
                                         FontWeight.Bold else FontWeight.Normal
@@ -188,6 +191,7 @@ fun Ps2StudioScreen(
                                         Ps2Tab.GAMES     -> Icons.Default.VideogameAsset
                                         Ps2Tab.MERGE_CFG -> Icons.Default.MergeType
                                         Ps2Tab.DOWNLOAD  -> Icons.Default.Download
+                                        Ps2Tab.TRANSFER  -> Icons.Default.SwapHoriz
                                     },
                                     contentDescription = null,
                                     modifier = Modifier.size(18.dp)
@@ -222,6 +226,7 @@ fun Ps2StudioScreen(
                     )
                     Ps2Tab.MERGE_CFG -> UlCfgMergerScreen()
                     Ps2Tab.DOWNLOAD  -> Ps2DownloadScreen(viewModel = viewModel)
+                    Ps2Tab.TRANSFER  -> UsbTransferScreen(viewModel = viewModel)
                 }
             }
         }
