@@ -10,9 +10,10 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import com.usbdiskmanager.prefs.AppTheme
 
 private val DarkColorScheme = darkColorScheme(
-    primary = Color(0xFF4FC3F7),           // Light blue - USB/tech feel
+    primary = Color(0xFF4FC3F7),
     onPrimary = Color(0xFF003258),
     primaryContainer = Color(0xFF004879),
     onPrimaryContainer = Color(0xFFCDE5FF),
@@ -28,7 +29,7 @@ private val DarkColorScheme = darkColorScheme(
     onError = Color(0xFF690005),
     errorContainer = Color(0xFF93000A),
     onErrorContainer = Color(0xFFFFDAD6),
-    background = Color(0xFF0A0E17),         // Very dark navy
+    background = Color(0xFF0A0E17),
     onBackground = Color(0xFFE2E8F0),
     surface = Color(0xFF111827),
     onSurface = Color(0xFFE2E8F0),
@@ -53,19 +54,59 @@ private val LightColorScheme = lightColorScheme(
     onSurfaceVariant = Color(0xFF455A64)
 )
 
+private val AmoledColorScheme = darkColorScheme(
+    primary = Color(0xFF4FC3F7),
+    onPrimary = Color(0xFF003258),
+    primaryContainer = Color(0xFF003A5C),
+    onPrimaryContainer = Color(0xFFCDE5FF),
+    secondary = Color(0xFF64B5F6),
+    onSecondary = Color(0xFF003256),
+    secondaryContainer = Color(0xFF00324E),
+    onSecondaryContainer = Color(0xFFCDE5FF),
+    tertiary = Color(0xFF81C784),
+    onTertiary = Color(0xFF003919),
+    tertiaryContainer = Color(0xFF003D1A),
+    onTertiaryContainer = Color(0xFF9CF4A3),
+    error = Color(0xFFFF5252),
+    onError = Color(0xFF690005),
+    errorContainer = Color(0xFF7A0009),
+    onErrorContainer = Color(0xFFFFDAD6),
+    background = Color(0xFF000000),
+    onBackground = Color(0xFFE2E8F0),
+    surface = Color(0xFF000000),
+    onSurface = Color(0xFFE2E8F0),
+    surfaceVariant = Color(0xFF0D1117),
+    onSurfaceVariant = Color(0xFFB0BEC5),
+    outline = Color(0xFF263238),
+    outlineVariant = Color(0xFF1A1F26),
+    surfaceContainerHighest = Color(0xFF111520),
+    surfaceContainerHigh = Color(0xFF0D1117),
+    surfaceContainer = Color(0xFF08090E),
+    surfaceContainerLow = Color(0xFF050508),
+    surfaceContainerLowest = Color(0xFF000000)
+)
+
 @Composable
 fun UsbDiskManagerTheme(
-    darkTheme: Boolean = true, // Default to dark for disk manager feel
-    dynamicColor: Boolean = false,
+    appTheme: AppTheme = AppTheme.DARK,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+    val context = LocalContext.current
+    val systemDark = isSystemInDarkTheme()
+
+    val colorScheme = when (appTheme) {
+        AppTheme.AMOLED -> AmoledColorScheme
+        AppTheme.DYNAMIC -> {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                if (systemDark) dynamicDarkColorScheme(context)
+                else dynamicLightColorScheme(context)
+            } else {
+                DarkColorScheme
+            }
         }
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
+        AppTheme.DARK -> DarkColorScheme
+        AppTheme.LIGHT -> LightColorScheme
+        AppTheme.SYSTEM -> if (systemDark) DarkColorScheme else LightColorScheme
     }
 
     MaterialTheme(

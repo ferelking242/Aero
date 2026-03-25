@@ -1,5 +1,6 @@
 package com.usbdiskmanager.ui.screens
 
+import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -98,7 +99,6 @@ fun SettingsScreen(
                 .padding(paddingValues)
                 .verticalScroll(rememberScrollState())
         ) {
-            // ─── General ─────────────────────────────────────────────────────
             SettingsSectionHeader(stringResource(R.string.settings_section_general))
 
             SettingsItem(
@@ -117,10 +117,8 @@ fun SettingsScreen(
 
             HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
 
-            // ─── Shizuku ─────────────────────────────────────────────────────
             SettingsSectionHeader(stringResource(R.string.settings_section_shizuku))
 
-            // Shizuku status card
             ShizukuSettingsCard(
                 state = shizukuState,
                 isInstalled = viewModel.isShizukuInstalled(),
@@ -131,7 +129,6 @@ fun SettingsScreen(
 
             HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
 
-            // ─── About ───────────────────────────────────────────────────────
             SettingsSectionHeader(stringResource(R.string.settings_section_about))
 
             SettingsItem(
@@ -184,8 +181,6 @@ fun SettingsScreen(
     }
 }
 
-// ─── Shizuku Card ─────────────────────────────────────────────────────────────
-
 @Composable
 private fun ShizukuSettingsCard(
     state: ShizukuState,
@@ -210,9 +205,7 @@ private fun ShizukuSettingsCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            // Header row
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // Cat icon + colored dot
                 Box {
                     Icon(
                         painter = painterResource(R.drawable.ic_shizuku_cat),
@@ -245,7 +238,6 @@ private fun ShizukuSettingsCard(
 
             Spacer(Modifier.height(12.dp))
 
-            // Description
             Text(
                 stringResource(R.string.shizuku_description),
                 style = MaterialTheme.typography.bodySmall,
@@ -254,7 +246,6 @@ private fun ShizukuSettingsCard(
 
             Spacer(Modifier.height(12.dp))
 
-            // ADB command when not running
             if (state is ShizukuState.NotRunning) {
                 Surface(
                     color = MaterialTheme.colorScheme.surfaceVariant,
@@ -271,7 +262,6 @@ private fun ShizukuSettingsCard(
                 Spacer(Modifier.height(10.dp))
             }
 
-            // Action buttons
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth()
@@ -322,7 +312,6 @@ private fun ShizukuSettingsCard(
                 }
             }
 
-            // Feature list when ready
             if (state is ShizukuState.Ready) {
                 Spacer(Modifier.height(10.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -353,8 +342,6 @@ private fun ShizukuSettingsCard(
         }
     }
 }
-
-// ─── Language Dialog ──────────────────────────────────────────────────────────
 
 data class LanguageOption(val code: String, val label: String, val flag: String)
 
@@ -441,7 +428,13 @@ private fun LanguageDialog(
     )
 }
 
-// ─── Theme Dialog ─────────────────────────────────────────────────────────────
+data class ThemeOption(
+    val theme: AppTheme,
+    val label: String,
+    val subtitle: String,
+    val icon: ImageVector,
+    val isAvailable: Boolean = true
+)
 
 @Composable
 private fun ThemeDialog(
@@ -449,24 +442,30 @@ private fun ThemeDialog(
     onSelect: (AppTheme) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val isDynamic = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+
     val options = listOf(
-        AppTheme.SYSTEM to stringResource(R.string.settings_theme_system),
-        AppTheme.LIGHT to stringResource(R.string.settings_theme_light),
-        AppTheme.DARK to stringResource(R.string.settings_theme_dark)
+        ThemeOption(AppTheme.SYSTEM, stringResource(R.string.settings_theme_system), "Suit le système", Icons.Default.Smartphone),
+        ThemeOption(AppTheme.LIGHT, stringResource(R.string.settings_theme_light), "Fond blanc, tons clairs", Icons.Default.LightMode),
+        ThemeOption(AppTheme.DARK, stringResource(R.string.settings_theme_dark), "Fond sombre, bleu tech", Icons.Default.DarkMode),
+        ThemeOption(AppTheme.AMOLED, "AMOLED Noir", "Noir pur, idéal OLED", Icons.Default.Contrast),
+        ThemeOption(AppTheme.DYNAMIC, "Material You", "Couleurs dynamiques Android 12+", Icons.Default.AutoAwesome, isDynamic)
     )
+
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(Icons.Default.Palette, null) },
         title = { Text(stringResource(R.string.settings_theme)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                options.forEach { (theme, label) ->
-                    val selected = currentTheme == theme
+                options.forEach { option ->
+                    val selected = currentTheme == option.theme
+                    val alpha = if (option.isAvailable) 1f else 0.4f
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(8.dp))
-                            .clickable { onSelect(theme) }
+                            .clickable(enabled = option.isAvailable) { onSelect(option.theme) }
                             .background(
                                 if (selected) MaterialTheme.colorScheme.primaryContainer
                                 else Color.Transparent
@@ -474,20 +473,28 @@ private fun ThemeDialog(
                             .padding(horizontal = 12.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        val icon = when (theme) {
-                            AppTheme.SYSTEM -> Icons.Default.Smartphone
-                            AppTheme.LIGHT -> Icons.Default.LightMode
-                            AppTheme.DARK -> Icons.Default.DarkMode
-                        }
-                        Icon(icon, null, modifier = Modifier.size(20.dp))
-                        Spacer(Modifier.width(12.dp))
-                        Text(
-                            label,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+                        Icon(
+                            option.icon, null,
+                            modifier = Modifier.size(20.dp),
+                            tint = if (selected) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha)
                         )
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                option.label,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha)
+                            )
+                            Text(
+                                if (!option.isAvailable) option.subtitle + " (Android 12+)"
+                                else option.subtitle,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha)
+                            )
+                        }
                         if (selected) {
-                            Spacer(Modifier.weight(1f))
                             Icon(
                                 Icons.Default.Check,
                                 null,
@@ -506,8 +513,6 @@ private fun ThemeDialog(
         }
     )
 }
-
-// ─── Shared components ────────────────────────────────────────────────────────
 
 @Composable
 private fun SettingsSectionHeader(title: String) {
@@ -568,7 +573,9 @@ private fun languageLabel(code: String): String {
 
 @Composable
 private fun themeLabel(theme: AppTheme): String = when (theme) {
-    AppTheme.LIGHT -> stringResource(R.string.settings_theme_light)
-    AppTheme.DARK -> stringResource(R.string.settings_theme_dark)
-    AppTheme.SYSTEM -> stringResource(R.string.settings_theme_system)
+    AppTheme.LIGHT   -> stringResource(R.string.settings_theme_light)
+    AppTheme.DARK    -> stringResource(R.string.settings_theme_dark)
+    AppTheme.AMOLED  -> "AMOLED Noir"
+    AppTheme.DYNAMIC -> "Material You"
+    AppTheme.SYSTEM  -> stringResource(R.string.settings_theme_system)
 }

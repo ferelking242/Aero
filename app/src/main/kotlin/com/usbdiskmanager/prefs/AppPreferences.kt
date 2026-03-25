@@ -14,7 +14,7 @@ import javax.inject.Singleton
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "app_prefs")
 
-enum class AppTheme { SYSTEM, LIGHT, DARK }
+enum class AppTheme { SYSTEM, LIGHT, DARK, AMOLED, DYNAMIC }
 
 @Singleton
 class AppPreferences @Inject constructor(
@@ -25,16 +25,17 @@ class AppPreferences @Inject constructor(
         val KEY_THEME = stringPreferencesKey("theme")
     }
 
-    /** "auto" | "en" | "fr" | "es" | "de" | "pt" */
     val language: Flow<String> = context.dataStore.data.map { prefs ->
         prefs[KEY_LANGUAGE] ?: "auto"
     }
 
     val theme: Flow<AppTheme> = context.dataStore.data.map { prefs ->
         when (prefs[KEY_THEME]) {
-            "light" -> AppTheme.LIGHT
-            "dark" -> AppTheme.DARK
-            else -> AppTheme.SYSTEM
+            "light"   -> AppTheme.LIGHT
+            "dark"    -> AppTheme.DARK
+            "amoled"  -> AppTheme.AMOLED
+            "dynamic" -> AppTheme.DYNAMIC
+            else      -> AppTheme.SYSTEM
         }
     }
 

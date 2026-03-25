@@ -25,9 +25,6 @@ class UsbDiskManagerApp : Application() {
         }
 
         Timber.i("UsbDiskManager started")
-
-        // Restore saved language and theme preferences synchronously at startup
-        // so the UI renders in the correct language from the first frame.
         restorePreferences()
     }
 
@@ -36,7 +33,7 @@ class UsbDiskManagerApp : Application() {
             val lang = runBlocking { appPreferences.language.first() }
             val theme = runBlocking { appPreferences.theme.first() }
             applyLocale(lang)
-            applyTheme(theme)
+            applyNightMode(theme)
         } catch (e: Exception) {
             Timber.w("Failed to restore preferences: ${e.message}")
         }
@@ -51,11 +48,13 @@ class UsbDiskManagerApp : Application() {
         AppCompatDelegate.setApplicationLocales(localeList)
     }
 
-    private fun applyTheme(theme: AppTheme) {
+    fun applyNightMode(theme: AppTheme) {
         val mode = when (theme) {
-            AppTheme.LIGHT -> AppCompatDelegate.MODE_NIGHT_NO
-            AppTheme.DARK -> AppCompatDelegate.MODE_NIGHT_YES
-            AppTheme.SYSTEM -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
+            AppTheme.LIGHT   -> AppCompatDelegate.MODE_NIGHT_NO
+            AppTheme.DARK    -> AppCompatDelegate.MODE_NIGHT_YES
+            AppTheme.AMOLED  -> AppCompatDelegate.MODE_NIGHT_YES
+            AppTheme.DYNAMIC -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
+            AppTheme.SYSTEM  -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
         }
         AppCompatDelegate.setDefaultNightMode(mode)
     }

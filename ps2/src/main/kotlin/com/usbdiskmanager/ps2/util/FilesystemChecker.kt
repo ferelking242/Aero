@@ -14,10 +14,6 @@ data class MountInfo(
 @Singleton
 class FilesystemChecker @Inject constructor() {
 
-    /**
-     * Returns the filesystem type for the given path (e.g. "vfat", "exfat", "ntfs").
-     * Reads /proc/mounts to find the best matching mount point.
-     */
     fun getFsType(path: String): String? {
         val mounts = readMounts()
         val best = mounts
@@ -26,17 +22,11 @@ class FilesystemChecker @Inject constructor() {
         return best?.fsType
     }
 
-    /**
-     * Returns true if the path is on a FAT32 (vfat) filesystem.
-     */
     fun isFat32(path: String): Boolean {
         val fs = getFsType(path)?.lowercase() ?: return false
         return fs in setOf("vfat", "fat32", "msdos")
     }
 
-    /**
-     * Returns true if the path is on an external/USB drive (not internal storage).
-     */
     fun isExternalMount(path: String): Boolean {
         if (path.contains("/sdcard") || path.contains("/storage/emulated")) return false
         val mounts = readMounts()
@@ -47,10 +37,33 @@ class FilesystemChecker @Inject constructor() {
     }
 
     /**
-     * Returns a list of all external/USB mount points (usable as UL destinations).
+     * Returns a list of all external/USB mount points, deduplicated.
+     * The same USB can appear at both /storage/XXXX-XXXX and /mnt/media_rw/XXXX-XXXX.
+     * We prefer /storage/ over /mnt/media_rw/ and keep only one entry per volume.
      */
     fun listExternalMounts(): List<MountInfo> {
-        return readMounts().filter { isExternalMountPoint(it.mountPoint, it.fsType) }
+        val all = readMounts().filter { isExternalMountPoint(it.mountPoint, it.fsType) }
+
+        val seen = mutableSetOf<String>()
+        val deduped = mutableListOf<MountInfo>()
+
+        // First pass: prefer /storage/ mounts (user-accessible)
+        for (m in all) {
+            val key = File(m.mountPoint).name.lowercase()
+            if (m.mountPoint.startsWith("/storage/") && seen.add(key)) {
+                deduped.add(m)
+            }
+        }
+        // Second pass: add remaining mounts not already covered
+        for (m in all) {
+            val key = File(m.mountPoint).name.lowercase()
+            if (!m.mountPoint.startsWith("/storage/") && seen.add(key)) {
+                deduped.add(m)
+            }
+        }
+
+        Timber.d("listExternalMounts: ${deduped.map { it.mountPoint }}")
+        return deduped
     }
 
     private fun isExternalMountPoint(mnt: String, fs: String): Boolean {
@@ -83,7 +96,6 @@ class FilesystemChecker @Inject constructor() {
                 Timber.w(e, "Could not read $mountFile")
             }
         }
-        // Fallback: scan /storage
         scanStorageDir("/storage", result)
         scanStorageDir("/mnt/media_rw", result)
         return result
@@ -101,15 +113,8 @@ class FilesystemChecker @Inject constructor() {
         } catch (_: Exception) {}
     }
 
-    /**
-     * Label for a mount point — tries to derive a human readable name.
-     */
     fun labelFor(mountPoint: String): String {
         val name = File(mountPoint).name
-        return if (name.matches(Regex("[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}"))) {
-            "USB ($name)"
-        } else {
-            "USB ($name)"
-        }
+        return "USB ($name)"
     }
 }

@@ -225,48 +225,90 @@ class UsbDeviceRepositoryImpl @Inject constructor(
         emit(DiskOperationResult.Progress(0, "Préparation…"))
 
         if (!commandRunner.hasPrivilegedAccess) {
-            emit(DiskOperationResult.Progress(5, "Mode standard — Shizuku requis pour formatage"))
+            emit(DiskOperationResult.Progress(5, "Mode standard détecté — tentative sans Shizuku"))
         }
 
         val device = rawDeviceMap[deviceId]
             ?: run { emit(DiskOperationResult.Error("Périphérique introuvable")); return@flow }
 
         emit(DiskOperationResult.Progress(10, "Recherche du bloc device…"))
-        val blockDevice = findBlockDeviceForUsb(device)
+        val blockDevFromSysfs = findBlockDeviceForUsb(device)
         val mounts = findAllMountPoints()
         val mountInfo = matchDeviceToMount(device, mounts)
-        val blockDev = blockDevice ?: mountInfo?.blockDevice
-            ?: run {
-                emit(DiskOperationResult.Error(
-                    "Impossible de trouver le bloc device.\n" +
-                    "Le formatage nécessite Shizuku ou root."
-                ))
-                return@flow
-            }
 
-        emit(DiskOperationResult.Progress(20, "Démontage…"))
+        // Resolve the real block device: prefer sysfs result, then /proc/mounts lookup,
+        // then fallback scan, because mountInfo.blockDevice is often "vold" (not usable).
+        val blockDev = when {
+            blockDevFromSysfs != null -> blockDevFromSysfs
+            else -> {
+                val fromMounts = mountInfo?.mountPoint?.let { findBlockDeviceFromMounts(it) }
+                fromMounts ?: findFallbackUsbBlockDevice()
+            }
+        }
+
+        if (blockDev == null) {
+            if (fileSystem.uppercase() == "FAT32" || fileSystem.uppercase() == "EXFAT") {
+                emit(DiskOperationResult.Error(
+                    "Impossible de localiser le bloc device USB.\n" +
+                    "Essayez de démonter puis remonter la clé via Shizuku\n" +
+                    "pour que l'application puisse identifier le périphérique."
+                ))
+            } else {
+                emit(DiskOperationResult.Error(
+                    "Bloc device introuvable. Shizuku est requis pour formater en $fileSystem.\n" +
+                    "Pour FAT32/exFAT, reconnectez la clé et réessayez."
+                ))
+            }
+            return@flow
+        }
+
+        Timber.d("Format target: $blockDev (from sysfs: $blockDevFromSysfs)")
+
+        emit(DiskOperationResult.Progress(20, "Démontage de ${mountInfo?.mountPoint ?: blockDev}…"))
         mountInfo?.mountPoint?.let { commandRunner.run("sync && umount \"$it\" 2>&1 || true") }
+        // Also try unmounting by device
+        commandRunner.run("umount $blockDev 2>&1 || true")
+        commandRunner.run("umount ${blockDev}1 2>&1 || true")
 
         emit(DiskOperationResult.Progress(35, "Formatage en $fileSystem…"))
-        val cmd = buildFormatCommand(blockDev, fileSystem, label)
-        Timber.d("Format command: $cmd (privileged=${commandRunner.hasPrivilegedAccess})")
-        val result = commandRunner.run(cmd, forcePrivileged = true)
 
-        if (result.isSuccess) {
-            emit(DiskOperationResult.Progress(95, "Finalisation…"))
-            commandRunner.run("sync")
-            emit(DiskOperationResult.Progress(100, "Formatage terminé !"))
-            emit(DiskOperationResult.Success(
-                "✓ Formaté en $fileSystem avec succès\n" +
-                if (label.isNotEmpty()) "Label: $label" else ""
-            ))
-        } else {
-            val errMsg = result.output.take(300)
+        // Try partition paths first (most USB keys have a partition table)
+        val targets = listOf("${blockDev}1", "${blockDev}p1", blockDev)
+        var lastError = ""
+        var succeeded = false
+
+        for (target in targets) {
+            val cmd = buildFormatCommand(target, fileSystem, label)
+            Timber.d("Trying: $cmd (privileged=${commandRunner.hasPrivilegedAccess})")
+            emit(DiskOperationResult.Progress(50, "Tentative sur $target…"))
+            val result = commandRunner.run(cmd, forcePrivileged = true)
+            if (result.isSuccess) {
+                emit(DiskOperationResult.Progress(95, "Finalisation…"))
+                commandRunner.run("sync")
+                emit(DiskOperationResult.Progress(100, "Formatage terminé !"))
+                emit(DiskOperationResult.Success(
+                    "✓ Formaté $target en $fileSystem\n" +
+                    if (label.isNotEmpty()) "Label: $label\n" else "" +
+                    if (!commandRunner.hasPrivilegedAccess)
+                        "Note: formaté sans Shizuku (shell standard)" else ""
+                ))
+                succeeded = true
+                break
+            } else {
+                lastError = result.output.take(200)
+                Timber.w("Format failed on $target: $lastError")
+            }
+        }
+
+        if (!succeeded) {
             emit(DiskOperationResult.Error(
-                "Formatage échoué: $errMsg\n\n" +
+                "Formatage $fileSystem échoué sur $blockDev\n\n" +
+                "Erreur: $lastError\n\n" +
                 if (!commandRunner.hasPrivilegedAccess)
-                    "Active Shizuku pour le formatage sans root."
-                else "Vérifier que le périphérique est accessible."
+                    "Conseil : active Shizuku pour un formatage fiable (NTFS/EXT4 requis).\n" +
+                    "Pour FAT32, mkfs.vfat doit être disponible dans le shell Android."
+                else
+                    "Vérifiez que le périphérique n'est pas protégé en écriture."
             ))
         }
     }
@@ -325,7 +367,7 @@ class UsbDeviceRepositoryImpl @Inject constructor(
     // ─── Mount detection ─────────────────────────────────────────────────────
 
     private fun findAllMountPoints(): List<UsbMountInfo> {
-        val result = mutableListOf<UsbMountInfo>()
+        val raw = mutableListOf<UsbMountInfo>()
         val seen = mutableSetOf<String>()
 
         // Strategy 1+2: /proc/mounts
@@ -334,23 +376,37 @@ class UsbDeviceRepositoryImpl @Inject constructor(
                 File(mountFile).forEachLine { line ->
                     val p = line.trim().split(Regex("\\s+"))
                     if (p.size >= 3 && isExternalMount(p[1], p[2]) && seen.add(p[1]))
-                        result.add(UsbMountInfo(p[0], p[1], p[2]))
+                        raw.add(UsbMountInfo(p[0], p[1], p[2]))
                 }
-                if (result.isNotEmpty()) break
+                if (raw.isNotEmpty()) break
             } catch (_: Exception) {}
         }
 
         // Strategy 3-6: storage scan
         for (root in listOf("/storage", "/mnt/media_rw", "/mnt/usb_storage")) {
-            scanDir(root, result, seen)
+            scanDir(root, raw, seen)
         }
         for (dir in listOf("/mnt/ext_sd", "/mnt/sdcard2", "/mnt/external_sd", "/mnt/usb")) {
             try {
                 val f = File(dir)
                 if (f.exists() && f.isDirectory && f.canRead() && seen.add(dir))
-                    result.add(UsbMountInfo("vold", dir, "vfat"))
+                    raw.add(UsbMountInfo("vold", dir, "vfat"))
             } catch (_: Exception) {}
         }
+
+        // Deduplicate: the same USB volume appears at both /storage/XXXX and /mnt/media_rw/XXXX.
+        // Keep only one per volume name, preferring the /storage/ path (user-accessible).
+        val seenVolumes = mutableSetOf<String>()
+        val result = mutableListOf<UsbMountInfo>()
+        for (m in raw) {
+            if (m.mountPoint.startsWith("/storage/") && seenVolumes.add(File(m.mountPoint).name.lowercase()))
+                result.add(m)
+        }
+        for (m in raw) {
+            if (!m.mountPoint.startsWith("/storage/") && seenVolumes.add(File(m.mountPoint).name.lowercase()))
+                result.add(m)
+        }
+        Timber.d("findAllMountPoints: ${result.map { it.mountPoint }}")
         return result
     }
 
@@ -416,6 +472,41 @@ class UsbDeviceRepositoryImpl @Inject constructor(
     }
 
     // ─── Block device discovery ───────────────────────────────────────────────
+
+    /**
+     * Looks up the real block device path from /proc/mounts for a given mount point.
+     * Returns null if not found or if the device is "vold" (not a real path).
+     */
+    private fun findBlockDeviceFromMounts(mountPoint: String): String? {
+        for (mountFile in listOf("/proc/mounts", "/proc/self/mounts")) {
+            try {
+                File(mountFile).forEachLine { line ->
+                    val parts = line.trim().split(Regex("\\s+"))
+                    if (parts.size >= 2 && parts[1] == mountPoint) {
+                        val dev = parts[0]
+                        if (dev.startsWith("/dev/") && !dev.contains("vold") && !dev.contains("fuse")) {
+                            return dev
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+        return null
+    }
+
+    /**
+     * Tries common USB block device paths as a last resort.
+     * On Android, USB OTG is typically /dev/block/sda or /dev/block/sdb.
+     */
+    private fun findFallbackUsbBlockDevice(): String? {
+        val candidates = listOf(
+            "/dev/block/sda", "/dev/block/sdb", "/dev/block/sdc",
+            "/dev/sda", "/dev/sdb", "/dev/sdc",
+            "/dev/block/vold/public:8,1",
+            "/dev/block/vold/public:8,17"
+        )
+        return candidates.firstOrNull { File(it).exists() }
+    }
 
     private fun findBlockDeviceForUsb(device: UsbDevice): String? {
         return try {

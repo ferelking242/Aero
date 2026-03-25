@@ -160,7 +160,12 @@ fun Ps2DownloadScreen(viewModel: Ps2ViewModel) {
                 }
             } else if (!uiState.isoSearchLoading && uiState.isoSearchQuery.isBlank()) {
                 item {
-                    SearchEmptyHint()
+                    PopularGamesSection(
+                        onGameClick = { gameName ->
+                            viewModel.setIsoSearchQuery(gameName)
+                            viewModel.searchIso(gameName)
+                        }
+                    )
                 }
             }
 
@@ -342,23 +347,110 @@ private fun SearchResultCard(
     }
 }
 
+private val POPULAR_PS2_GAMES = listOf(
+    "God of War" to "Action",
+    "Shadow of the Colossus" to "Action/Aventure",
+    "Kingdom Hearts" to "RPG",
+    "Final Fantasy X" to "RPG",
+    "Grand Theft Auto San Andreas" to "Open World",
+    "Dragon Ball Z Budokai Tenkaichi 3" to "Combat",
+    "Tekken 5" to "Combat",
+    "Silent Hill 2" to "Horreur",
+    "Resident Evil 4" to "Survival",
+    "Metal Gear Solid 3" to "Action",
+    "Ico" to "Aventure",
+    "Okami" to "Action/Aventure",
+    "Devil May Cry 3" to "Action",
+    "Burnout 3 Takedown" to "Course",
+    "Jak and Daxter" to "Platforme",
+    "Ratchet and Clank" to "Platforme",
+    "Pro Evolution Soccer 6" to "Sport",
+    "Black" to "FPS",
+    "Killzone" to "FPS",
+    "We Love Katamari" to "Puzzle"
+)
+
 @Composable
-private fun SearchEmptyHint() {
+private fun PopularGamesSection(onGameClick: (String) -> Unit) {
     Column(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Icon(Icons.Default.Search, null, modifier = Modifier.size(48.dp),
-            tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
-        Text("Recherchez un jeu PS2 pour le télécharger",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center)
-        Text("Les résultats proviennent d'Internet Archive,\nune bibliothèque de préservation numérique légale.",
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(Icons.Default.Star, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+            Text(
+                "Jeux populaires",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+
+        Text(
+            "Cliquez sur un jeu pour le rechercher sur Internet Archive",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        // Grid of game chips
+        val chunkedGames = POPULAR_PS2_GAMES.chunked(2)
+        chunkedGames.forEach { rowItems ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                rowItems.forEach { (gameName, genre) ->
+                    Card(
+                        onClick = { onGameClick(gameName) },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.VideogameAsset, null,
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Column {
+                                Text(
+                                    gameName,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 2
+                                )
+                                Text(
+                                    genre,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 10.sp
+                                )
+                            }
+                        }
+                    }
+                }
+                // Fill remaining space if odd number in row
+                if (rowItems.size == 1) {
+                    Spacer(Modifier.weight(1f))
+                }
+            }
+        }
+
+        HorizontalDivider(modifier = Modifier.padding(top = 4.dp))
+        Text(
+            "Les résultats proviennent d'Internet Archive,\nune bibliothèque de préservation numérique légale.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.outline,
-            textAlign = TextAlign.Center, fontSize = 11.sp)
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+            fontSize = 11.sp
+        )
     }
 }
 

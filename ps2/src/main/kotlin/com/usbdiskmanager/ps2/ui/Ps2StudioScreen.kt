@@ -176,10 +176,11 @@ fun Ps2StudioScreen(
                             text = {
                                 Text(
                                     text = when (tab) {
-                                        Ps2Tab.GAMES     -> "Jeux"
-                                        Ps2Tab.MERGE_CFG -> "Fusionner CFG"
-                                        Ps2Tab.DOWNLOAD  -> "Télécharger"
-                                        Ps2Tab.TRANSFER  -> "Transfert USB"
+                                        Ps2Tab.GAMES      -> "Jeux"
+                                        Ps2Tab.MERGE_CFG  -> "Fusionner CFG"
+                                        Ps2Tab.UL_MANAGER -> "UL Manager"
+                                        Ps2Tab.DOWNLOAD   -> "Télécharger"
+                                        Ps2Tab.TRANSFER   -> "Transfert USB"
                                     },
                                     fontWeight = if (uiState.selectedTab == tab)
                                         FontWeight.Bold else FontWeight.Normal
@@ -188,10 +189,11 @@ fun Ps2StudioScreen(
                             icon = {
                                 Icon(
                                     when (tab) {
-                                        Ps2Tab.GAMES     -> Icons.Default.VideogameAsset
-                                        Ps2Tab.MERGE_CFG -> Icons.Default.MergeType
-                                        Ps2Tab.DOWNLOAD  -> Icons.Default.Download
-                                        Ps2Tab.TRANSFER  -> Icons.Default.SwapHoriz
+                                        Ps2Tab.GAMES      -> Icons.Default.VideogameAsset
+                                        Ps2Tab.MERGE_CFG  -> Icons.Default.MergeType
+                                        Ps2Tab.UL_MANAGER -> Icons.Default.ManageSearch
+                                        Ps2Tab.DOWNLOAD   -> Icons.Default.Download
+                                        Ps2Tab.TRANSFER   -> Icons.Default.SwapHoriz
                                     },
                                     contentDescription = null,
                                     modifier = Modifier.size(18.dp)
@@ -219,14 +221,15 @@ fun Ps2StudioScreen(
                 )
             } else {
                 when (uiState.selectedTab) {
-                    Ps2Tab.GAMES     -> GameListTab(
+                    Ps2Tab.GAMES      -> GameListTab(
                         uiState = uiState,
                         viewModel = viewModel,
                         onPickFolder = { folderPickerLauncher.launch(null) }
                     )
-                    Ps2Tab.MERGE_CFG -> UlCfgMergerScreen()
-                    Ps2Tab.DOWNLOAD  -> Ps2DownloadScreen(viewModel = viewModel)
-                    Ps2Tab.TRANSFER  -> UsbTransferScreen(viewModel = viewModel)
+                    Ps2Tab.MERGE_CFG  -> UlCfgMergerScreen()
+                    Ps2Tab.UL_MANAGER -> UlManagerScreen(viewModel = viewModel)
+                    Ps2Tab.DOWNLOAD   -> Ps2DownloadScreen(viewModel = viewModel)
+                    Ps2Tab.TRANSFER   -> UsbTransferScreen(viewModel = viewModel)
                 }
             }
         }

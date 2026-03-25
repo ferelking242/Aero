@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.usbdiskmanager.ps2.data.IsoSearchService
 import com.usbdiskmanager.ps2.data.Ps2RepositoryImpl
+import com.usbdiskmanager.ps2.data.converter.UlCfgManager
 import com.usbdiskmanager.ps2.data.download.DownloadEngine
 import com.usbdiskmanager.ps2.data.scanner.IsoScanner
 import com.usbdiskmanager.ps2.data.transfer.UsbGameTransferManager
@@ -61,7 +62,12 @@ data class Ps2UiState(
     val isoSearchLoading: Boolean = false,
     val isoSearchError: String? = null,
     val resolvedDownload: IsoSearchResult? = null,
-    val resolvingId: String? = null
+    val resolvingId: String? = null,
+    // UL Manager
+    val ulManagerMount: String? = null,
+    val ulGames: List<UsbGame> = emptyList(),
+    val ulManagerLoading: Boolean = false,
+    val ulManagerError: String? = null
 ) {
     val filteredGames: List<Ps2Game>
         get() {
@@ -83,7 +89,7 @@ data class Ps2UiState(
 
 enum class SortMode { TITLE, SIZE, STATUS }
 
-enum class Ps2Tab { GAMES, MERGE_CFG, DOWNLOAD, TRANSFER }
+enum class Ps2Tab { GAMES, MERGE_CFG, UL_MANAGER, DOWNLOAD, TRANSFER }
 
 @HiltViewModel
 class Ps2ViewModel @Inject constructor(
@@ -92,7 +98,8 @@ class Ps2ViewModel @Inject constructor(
     private val fsChecker: FilesystemChecker,
     private val downloadEngine: DownloadEngine,
     private val transferManager: UsbGameTransferManager,
-    private val searchService: IsoSearchService
+    private val searchService: IsoSearchService,
+    private val ulCfgManager: UlCfgManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(Ps2UiState())
@@ -314,6 +321,86 @@ class Ps2ViewModel @Inject constructor(
 
     fun setIsoSearchQuery(q: String) = _uiState.update { it.copy(isoSearchQuery = q) }
     fun clearIsoSearch() = _uiState.update { it.copy(isoSearchResults = emptyList(), isoSearchQuery = "", isoSearchError = null) }
+
+    // ── UL Manager ───────────────────────────────────────────────────────────
+
+    fun selectUlManagerMount(mountPoint: String) {
+        _uiState.update { it.copy(ulManagerMount = mountPoint, ulGames = emptyList(), ulManagerError = null) }
+        loadUlGames(mountPoint)
+    }
+
+    fun loadUlGames(mountPoint: String) {
+        _uiState.update { it.copy(ulManagerLoading = true, ulManagerError = null) }
+        viewModelScope.launch {
+            try {
+                val cfgFile = java.io.File(mountPoint, "ul.cfg")
+                if (!cfgFile.exists()) {
+                    _uiState.update { it.copy(ulManagerLoading = false, ulGames = emptyList(),
+                        ulManagerError = "Aucun fichier ul.cfg trouvé dans $mountPoint") }
+                    return@launch
+                }
+                val entries = ulCfgManager.readAllEntries(cfgFile)
+                val games = entries.map { entry ->
+                    val partFiles = java.io.File(mountPoint).listFiles { f ->
+                        f.name.startsWith("ul.${entry.gameIdClean}.") || f.name.startsWith("ul.${entry.gameId}.")
+                    }?.map { it.name } ?: emptyList()
+                    val size = partFiles.sumOf { name ->
+                        try { java.io.File(mountPoint, name).length() } catch (_: Exception) { 0L }
+                    }
+                    UsbGame(
+                        gameName = entry.gameName,
+                        gameId = entry.gameIdClean,
+                        numParts = entry.numParts,
+                        isCd = entry.isCd,
+                        mountPoint = mountPoint,
+                        partFiles = partFiles,
+                        sizeBytes = size
+                    )
+                }
+                _uiState.update { it.copy(ulManagerLoading = false, ulGames = games) }
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to load UL games from $mountPoint")
+                _uiState.update { it.copy(ulManagerLoading = false,
+                    ulManagerError = "Erreur de lecture: ${e.message}") }
+            }
+        }
+    }
+
+    fun renameUlGame(game: UsbGame, newName: String) {
+        val mountPoint = game.mountPoint
+        viewModelScope.launch {
+            try {
+                ulCfgManager.addOrUpdateEntry(
+                    outputDir = mountPoint,
+                    gameId = game.gameId,
+                    gameName = newName,
+                    numParts = game.numParts,
+                    isCD = game.isCd
+                )
+                loadUlGames(mountPoint)
+            } catch (e: Exception) {
+                _uiState.update { it.copy(ulManagerError = "Erreur renommage: ${e.message}") }
+            }
+        }
+    }
+
+    fun deleteUlGame(game: UsbGame) {
+        val mountPoint = game.mountPoint
+        viewModelScope.launch {
+            try {
+                ulCfgManager.removeEntry(mountPoint, game.gameId)
+                val dir = java.io.File(mountPoint)
+                dir.listFiles { f ->
+                    f.name.startsWith("ul.${game.gameId}.") || f.name.startsWith("ul.${game.gameId}")
+                }?.forEach { it.delete() }
+                loadUlGames(mountPoint)
+            } catch (e: Exception) {
+                _uiState.update { it.copy(ulManagerError = "Erreur suppression: ${e.message}") }
+            }
+        }
+    }
+
+    fun clearUlManagerError() = _uiState.update { it.copy(ulManagerError = null) }
 
     // ── Multi-select ────────────────────────────────────────────────────────
 

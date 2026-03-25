@@ -20,6 +20,9 @@ import androidx.core.net.toUri
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.usbdiskmanager.prefs.AppPreferences
+import com.usbdiskmanager.prefs.AppTheme
 import com.usbdiskmanager.service.UsbMonitorService
 import com.usbdiskmanager.ui.navigation.AppNavHost
 import com.usbdiskmanager.ui.theme.UsbDiskManagerTheme
@@ -34,6 +37,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var usbRepository: UsbDeviceRepository
+
+    @Inject
+    lateinit var appPreferences: AppPreferences
 
     private val dashboardViewModel: DashboardViewModel by viewModels()
 
@@ -68,7 +74,8 @@ class MainActivity : ComponentActivity() {
         handleUsbIntent(intent)
 
         setContent {
-            UsbDiskManagerTheme {
+            val theme by appPreferences.theme.collectAsStateWithLifecycle(initialValue = AppTheme.DARK)
+            UsbDiskManagerTheme(appTheme = theme) {
                 AppNavHost(
                     onRequestSafPermission = { directoryPickerLauncher.launch(null) }
                 )

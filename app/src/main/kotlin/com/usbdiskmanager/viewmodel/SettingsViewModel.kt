@@ -7,6 +7,7 @@ import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.LocaleListCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.usbdiskmanager.UsbDiskManagerApp
 import com.usbdiskmanager.prefs.AppPreferences
 import com.usbdiskmanager.prefs.AppTheme
 import com.usbdiskmanager.shizuku.ShizukuManager
@@ -44,7 +45,7 @@ class SettingsViewModel @Inject constructor(
     fun setTheme(appTheme: AppTheme) {
         viewModelScope.launch {
             prefs.setTheme(appTheme)
-            applyTheme(appTheme)
+            (getApplication<Application>() as? UsbDiskManagerApp)?.applyNightMode(appTheme)
         }
     }
 
@@ -92,14 +93,4 @@ class SettingsViewModel @Inject constructor(
         }
         AppCompatDelegate.setApplicationLocales(localeList)
     }
-
-    private fun applyTheme(appTheme: AppTheme) {
-        val mode = when (appTheme) {
-            AppTheme.LIGHT -> AppCompatDelegate.MODE_NIGHT_NO
-            AppTheme.DARK -> AppCompatDelegate.MODE_NIGHT_YES
-            AppTheme.SYSTEM -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
-        }
-        AppCompatDelegate.setDefaultNightMode(mode)
-    }
-
 }
