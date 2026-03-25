@@ -3,9 +3,9 @@ package com.usbdiskmanager.ps2.data.scanner
 import android.content.Context
 import android.net.Uri
 import android.os.Environment
-import com.usbdiskmanager.ps2.domain.model.DiscType
-import com.usbdiskmanager.ps2.domain.model.GameRegion
+import com.usbdiskmanager.ps2.domain.model.ConversionStatus
 import com.usbdiskmanager.ps2.domain.model.Ps2Game
+import com.usbdiskmanager.ps2.engine.IsoEngine
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -16,7 +16,8 @@ import javax.inject.Singleton
 
 @Singleton
 class IsoScanner @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val engine: IsoEngine
 ) {
 
     companion object {
@@ -31,7 +32,8 @@ class IsoScanner @Inject constructor(
     }
 
     /**
-     * Scan a list of directory paths and return all discovered PS2 ISO files.
+     * Scan a list of directory paths for .iso files.
+     * Game metadata is extracted via [IsoEngine] — no direct parser coupling.
      */
     suspend fun scanDirectories(paths: List<String>): List<Ps2Game> =
         withContext(Dispatchers.IO) {
@@ -54,28 +56,22 @@ class IsoScanner @Inject constructor(
         }
 
     /**
-     * Scan a URI provided via SAF.
+     * Scan a SAF-provided URI by resolving it to a real path.
      */
-    suspend fun scanUri(uri: Uri, artDir: String): List<Ps2Game> =
+    suspend fun scanUri(uri: Uri): List<Ps2Game> =
         withContext(Dispatchers.IO) {
-            // SAF path: try to resolve to a real File path
-            val realPath = resolveUriToPath(uri) ?: return@withContext emptyList()
-            scanDirectories(listOf(realPath))
+            val path = resolveUriToPath(uri) ?: return@withContext emptyList()
+            scanDirectories(listOf(path))
         }
 
     /**
      * Create the default PS2Manager folder structure if it doesn't exist.
      */
-    suspend fun ensureStructure(base: String): Unit = withContext(Dispatchers.IO) {
-        listOf(
-            "$base/ISO",
-            "$base/UL",
-            "$base/ART"
-        ).forEach { path ->
+    suspend fun ensureStructure(base: String) = withContext(Dispatchers.IO) {
+        listOf("$base/ISO", "$base/UL", "$base/ART").forEach { path ->
             val dir = File(path)
             if (!dir.exists()) {
-                val ok = dir.mkdirs()
-                Timber.d("Created dir $path: $ok")
+                Timber.d("Created dir $path: ${dir.mkdirs()}")
             }
         }
     }
@@ -84,36 +80,23 @@ class IsoScanner @Inject constructor(
     // Private helpers
     // ────────────────────────────────────────────
 
-    private fun parseIso(file: File): Ps2Game? = try {
-        val rawGameId = Iso9660Parser.readGameId(file) ?: ""
-        val gameId = rawGameId.ifEmpty { deriveIdFromFilename(file.nameWithoutExtension) }
-        val region = GameRegion.fromGameId(gameId)
-        val discType = when (Iso9660Parser.guessDiscType(file)) {
-            "CD" -> DiscType.CD
-            else -> DiscType.DVD
-        }
-        val artDir = DEFAULT_ART_DIR
-        val coverPath = coverArtPath(gameId, artDir)
-
+    private suspend fun parseIso(file: File): Ps2Game? = try {
+        val info = engine.getIsoInfo(file.absolutePath)
+        val coverPath = coverArtPath(info.gameId, DEFAULT_ART_DIR)
         Ps2Game(
             id = file.absolutePath,
             title = file.nameWithoutExtension,
-            gameId = gameId,
+            gameId = info.gameId,
             isoPath = file.absolutePath,
             sizeMb = file.length(),
-            region = region.label,
+            region = info.region,
             coverPath = coverPath,
-            discType = discType
+            discType = info.discType,
+            conversionStatus = ConversionStatus.NOT_CONVERTED
         )
     } catch (e: Exception) {
         Timber.w(e, "Could not parse ISO: ${file.name}")
         null
-    }
-
-    private fun deriveIdFromFilename(name: String): String {
-        // Try to extract game ID pattern from the filename itself
-        val regex = Regex("[A-Z]{4}[_]\\d{3}\\.\\d{2}", RegexOption.IGNORE_CASE)
-        return regex.find(name)?.value?.uppercase() ?: ""
     }
 
     private fun coverArtPath(gameId: String, artDir: String): String? {
@@ -124,9 +107,7 @@ class IsoScanner @Inject constructor(
     }
 
     private fun resolveUriToPath(uri: Uri): String? {
-        // For content:// URIs pointing to external storage
         val path = uri.path ?: return null
-        // Pattern: /tree/primary:some/path
         val primary = path.substringAfter("primary:", "")
         if (primary.isNotEmpty()) {
             return "${Environment.getExternalStorageDirectory()}/$primary"
