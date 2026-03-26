@@ -20,6 +20,12 @@ import com.usbdiskmanager.MainActivity
 import com.usbdiskmanager.R
 import com.usbdiskmanager.usb.api.UsbDeviceRepository
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -65,6 +71,7 @@ class UsbMonitorService : Service() {
 
     private var wakeLock: PowerManager.WakeLock? = null
     private var usbReceiver: BroadcastReceiver? = null
+    private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     override fun onCreate() {
         super.onCreate()
@@ -117,6 +124,7 @@ class UsbMonitorService : Service() {
     override fun onDestroy() {
         unregisterUsbReceiver()
         releaseWakeLock()
+        serviceScope.cancel()
         Timber.i("UsbMonitorService destroyed")
         super.onDestroy()
     }
@@ -164,7 +172,16 @@ class UsbMonitorService : Service() {
                 when (intent.action) {
                     UsbManager.ACTION_USB_DEVICE_ATTACHED -> {
                         Timber.i("USB attached (monitor): ${device?.deviceName}")
-                        device?.let { usbRepository.onDeviceAttached(it) }
+                        device?.let { d ->
+                            usbRepository.onDeviceAttached(d)
+                            serviceScope.launch {
+                                delay(2500)
+                                val id = "${d.vendorId}_${d.productId}_${d.deviceName.hashCode()}"
+                                Timber.i("Auto-mounting USB: ${d.deviceName}")
+                                usbRepository.mountDevice(id)
+                                updateNotification()
+                            }
+                        }
                         updateNotification()
                     }
                     UsbManager.ACTION_USB_DEVICE_DETACHED -> {

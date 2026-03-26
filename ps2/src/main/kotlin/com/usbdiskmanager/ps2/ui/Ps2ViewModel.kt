@@ -67,7 +67,10 @@ data class Ps2UiState(
     val ulManagerMount: String? = null,
     val ulGames: List<UsbGame> = emptyList(),
     val ulManagerLoading: Boolean = false,
-    val ulManagerError: String? = null
+    val ulManagerError: String? = null,
+    // Transfer multi-select
+    val transferSelectedIds: Set<String> = emptySet(),
+    val transferSourceMount: String? = null
 ) {
     val filteredGames: List<Ps2Game>
         get() {
@@ -99,7 +102,8 @@ class Ps2ViewModel @Inject constructor(
     private val downloadEngine: DownloadEngine,
     private val transferManager: UsbGameTransferManager,
     private val searchService: IsoSearchService,
-    private val ulCfgManager: UlCfgManager
+    private val ulCfgManager: UlCfgManager,
+    private val isoScanner: IsoScanner
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(Ps2UiState())
@@ -124,6 +128,7 @@ class Ps2ViewModel @Inject constructor(
             _uiState.update { it.copy(scanPaths = paths) }
             refreshUsbMounts()
             scan()
+            scanPhone()
         }
     }
 
@@ -137,6 +142,28 @@ class Ps2ViewModel @Inject constructor(
             } catch (e: Exception) {
                 Timber.e(e, "Scan failed")
                 _uiState.update { it.copy(errorMessage = e.message) }
+            } finally {
+                _uiState.update { it.copy(isScanning = false) }
+            }
+        }
+    }
+
+    fun scanPhone() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isScanning = true) }
+            try {
+                val phoneGames = isoScanner.scanPhoneStorage()
+                val existing = _uiState.value.games
+                val existingPaths = existing.map { it.isoPath }.toSet()
+                val newGames = phoneGames.filter { it.isoPath !in existingPaths }
+                if (newGames.isNotEmpty()) {
+                    _uiState.update { s ->
+                        s.copy(games = (s.games + newGames).sortedBy { it.title })
+                    }
+                    newGames.forEach { repository.addScanPath(it.isoPath.substringBeforeLast('/')) }
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "Phone scan failed")
             } finally {
                 _uiState.update { it.copy(isScanning = false) }
             }
@@ -279,6 +306,46 @@ class Ps2ViewModel @Inject constructor(
             }
             .launchIn(viewModelScope)
         activeTransferJobs[game.gameId] = job
+    }
+
+    // ── Transfer multi-select ────────────────────────────────────────────────
+
+    fun setTransferSourceMount(mountPoint: String?) {
+        _uiState.update { it.copy(transferSourceMount = mountPoint, transferSelectedIds = emptySet()) }
+    }
+
+    fun toggleTransferSelection(game: UsbGame) {
+        _uiState.update { s ->
+            val ids = s.transferSelectedIds.toMutableSet()
+            if (game.gameId in ids) ids.remove(game.gameId) else ids.add(game.gameId)
+            s.copy(transferSelectedIds = ids)
+        }
+    }
+
+    fun selectAllTransferGames() {
+        val mount = _uiState.value.transferSourceMount ?: return
+        val games = _uiState.value.transferState.usbGames[mount] ?: return
+        _uiState.update { it.copy(transferSelectedIds = games.map { g -> g.gameId }.toSet()) }
+    }
+
+    fun clearTransferSelection() {
+        _uiState.update { it.copy(transferSelectedIds = emptySet()) }
+    }
+
+    fun batchTransferToInternal() {
+        val mount = _uiState.value.transferSourceMount ?: return
+        val games = _uiState.value.transferState.usbGames[mount] ?: return
+        val selected = _uiState.value.transferSelectedIds
+        games.filter { it.gameId in selected }.forEach { transferUsbToInternal(it) }
+        _uiState.update { it.copy(transferSelectedIds = emptySet()) }
+    }
+
+    fun batchTransferToMount(targetMount: String) {
+        val mount = _uiState.value.transferSourceMount ?: return
+        val games = _uiState.value.transferState.usbGames[mount] ?: return
+        val selected = _uiState.value.transferSelectedIds
+        games.filter { it.gameId in selected }.forEach { transferUsbToUsb(it, targetMount) }
+        _uiState.update { it.copy(transferSelectedIds = emptySet()) }
     }
 
     // ── ISO Search (archive.org) ─────────────────────────────────────────────

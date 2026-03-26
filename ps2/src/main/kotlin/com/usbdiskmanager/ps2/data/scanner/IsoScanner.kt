@@ -35,6 +35,14 @@ class IsoScanner @Inject constructor(
 
         val DEFAULT_ART_DIR: String
             get() = "$BASE_DIR/ART"
+
+        private val PS2_ID_REGEX = Regex(
+            "^(SLES|SCES|SLUS|SCUS|SLED|SCED|SLPM|SLPS|SCPS|SCAJ|SLAJ|SLKA|SCKA|PBPX)[-_]?\\d",
+            RegexOption.IGNORE_CASE
+        )
+
+        fun isLikelyPS2Id(gameId: String): Boolean =
+            gameId.isNotBlank() && PS2_ID_REGEX.containsMatchIn(gameId)
     }
 
     suspend fun scanDirectories(paths: List<String>): List<Ps2Game> =
@@ -62,6 +70,48 @@ class IsoScanner @Inject constructor(
             val path = resolveUriToPath(uri) ?: return@withContext emptyList()
             scanDirectories(listOf(path))
         }
+
+    suspend fun scanPhoneStorage(): List<Ps2Game> = withContext(Dispatchers.IO) {
+        val root = Environment.getExternalStorageDirectory()
+        val searchPaths = mutableListOf<String>()
+
+        // Scan app folder first (default)
+        searchPaths.add(DEFAULT_ISO_DIR)
+
+        // Common user directories on the phone
+        listOf(
+            "Download", "Downloads", "Documents", "Movies", "Videos",
+            "Games", "PS2", "ISO", "ROMs", "Jeux"
+        ).forEach { dir ->
+            val f = File(root, dir)
+            if (f.isDirectory) searchPaths.add(f.absolutePath)
+        }
+
+        // Also scan root level (maxDepth=2 from root to avoid over-scanning)
+        searchPaths.add(root.absolutePath)
+
+        val results = mutableListOf<Ps2Game>()
+        val seen = mutableSetOf<String>()
+
+        for (path in searchPaths.distinct()) {
+            val dir = File(path)
+            if (!dir.exists() || !dir.isDirectory) continue
+            val depth = if (dir == root) 2 else 4
+            dir.walkTopDown()
+                .maxDepth(depth)
+                .filter { it.isFile && it.extension.lowercase() == "iso" }
+                .forEach { isoFile ->
+                    if (seen.add(isoFile.absolutePath)) {
+                        val game = parseIso(isoFile)
+                        if (game != null && isLikelyPS2Id(game.gameId)) {
+                            results.add(game)
+                        }
+                    }
+                }
+        }
+        Timber.i("scanPhoneStorage: found ${results.size} PS2 ISOs on phone")
+        results.sortedBy { it.title }
+    }
 
     suspend fun ensureStructure(base: String) = withContext(Dispatchers.IO) {
         listOf("$base/ISO", "$base/UL", "$base/ART", "$base/Downloads").forEach { path ->

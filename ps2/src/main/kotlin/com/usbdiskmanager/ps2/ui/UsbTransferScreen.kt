@@ -2,8 +2,6 @@ package com.usbdiskmanager.ps2.ui
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -16,7 +14,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -30,224 +27,258 @@ import com.usbdiskmanager.ps2.util.MountInfo
 @Composable
 fun UsbTransferScreen(viewModel: Ps2ViewModel) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val transferState = uiState.transferState
+    val mounts = uiState.availableUsbMounts
+    val sourceMount = uiState.transferSourceMount
+    val selectedSource = mounts.find { it.mountPoint == sourceMount } ?: mounts.firstOrNull()
+    val sourceGames = uiState.transferState.usbGames[selectedSource?.mountPoint] ?: emptyList()
+    val selectedIds = uiState.transferSelectedIds
+    val otherMounts = mounts.filter { it.mountPoint != selectedSource?.mountPoint }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    var showDestDialog by remember { mutableStateOf(false) }
 
-        // ── Header info banner ──
-        Surface(
-            color = MaterialTheme.colorScheme.primaryContainer,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(
-                modifier = Modifier.padding(12.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.Top
-            ) {
-                Icon(Icons.Default.Usb, null, tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.size(20.dp).padding(top = 1.dp))
-                Column {
-                    Text("Transfert USB ↔ Interne", fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer)
-                    Text(
-                        "Branchez une clé USB contenant des jeux UL. L'app liste les jeux et vous permet de les copier vers le stockage interne ou une autre USB.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                }
-            }
+    LaunchedEffect(selectedSource?.mountPoint) {
+        if (selectedSource != null && sourceMount != selectedSource.mountPoint) {
+            viewModel.setTransferSourceMount(selectedSource.mountPoint)
         }
+    }
 
-        // ── USB Mounts status bar ──
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            val mounts = uiState.availableUsbMounts
-            if (mounts.isEmpty()) {
-                Icon(Icons.Default.UsbOff, null, tint = MaterialTheme.colorScheme.outline,
-                    modifier = Modifier.size(18.dp))
-                Text("Aucune USB détectée", style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.outline)
-            } else {
-                Icon(Icons.Default.Usb, null, tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(18.dp))
-                Text(
-                    "${mounts.size} USB : ${mounts.joinToString(" • ") { it.mountPoint.substringAfterLast('/') }}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary
+    Scaffold(
+        floatingActionButton = {
+            if (selectedIds.isNotEmpty()) {
+                ExtendedFloatingActionButton(
+                    onClick = { showDestDialog = true },
+                    icon = { Icon(Icons.Default.Send, null) },
+                    text = { Text("Transférer ${selectedIds.size} jeu(x)") },
+                    containerColor = MaterialTheme.colorScheme.primary
                 )
             }
-            Spacer(Modifier.weight(1f))
-            IconButton(
-                onClick = {
-                    viewModel.refreshUsbMounts()
-                    viewModel.refreshTransferGames()
-                },
-                modifier = Modifier.size(32.dp)
-            ) {
-                if (transferState.isLoading) {
-                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                } else {
-                    Icon(Icons.Default.Refresh, "Rafraîchir", modifier = Modifier.size(18.dp))
-                }
-            }
         }
+    ) { padding ->
+        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
 
-        HorizontalDivider()
-
-        // ── Content ──
-        if (uiState.availableUsbMounts.isEmpty() && !transferState.isLoading) {
-            NoUsbPlaceholder()
-        } else {
-            LazyColumn(
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.weight(1f)
-            ) {
-                // ── Internal → USB section (games in internal UL folder) ──
-                if (transferState.internalGames.isNotEmpty() && uiState.availableUsbMounts.isNotEmpty()) {
-                    item {
-                        SectionHeader(
-                            icon = Icons.Default.PhoneAndroid,
-                            title = "Stockage interne → USB",
-                            count = transferState.internalGames.size
-                        )
-                    }
-                    items(transferState.internalGames, key = { "int_${it.gameId}" }) { game ->
-                        val progress = transferState.activeTransfers[game.gameId]
-                        UsbGameRow(
-                            game = game,
-                            progress = progress,
-                            primaryLabel = "Copier vers USB",
-                            primaryIcon = Icons.Default.Upload,
-                            availableMounts = uiState.availableUsbMounts.filter { it.mountPoint != game.mountPoint },
-                            onTransfer = { mount ->
-                                viewModel.transferInternalToUsb(game, mount)
-                            }
-                        )
-                    }
-                }
-
-                // ── USB sources ──
-                uiState.availableUsbMounts.forEach { mount ->
-                    val mountGames = transferState.usbGames[mount.mountPoint] ?: emptyList()
-                    val otherMounts = uiState.availableUsbMounts.filter { it.mountPoint != mount.mountPoint }
-
-                    item(key = "header_${mount.mountPoint}") {
-                        SectionHeader(
-                            icon = Icons.Default.Usb,
-                            title = "USB: ${mount.mountPoint.substringAfterLast('/')}",
-                            count = mountGames.size,
-                            subtitle = mount.fsType.uppercase()
-                        )
-                    }
-
-                    if (mountGames.isEmpty()) {
-                        item(key = "empty_${mount.mountPoint}") {
-                            Text("Aucun jeu UL trouvé sur cette clé.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.outline,
-                                modifier = Modifier.padding(start = 8.dp, bottom = 8.dp))
-                        }
-                    } else {
-                        items(mountGames, key = { "${mount.mountPoint}_${it.gameId}" }) { game ->
-                            val progress = transferState.activeTransfers[game.gameId]
-                            UsbGameRow(
-                                game = game,
-                                progress = progress,
-                                primaryLabel = "→ Interne",
-                                primaryIcon = Icons.Default.Download,
-                                availableMounts = otherMounts,
-                                onTransfer = { _ ->
-                                    viewModel.transferUsbToInternal(game)
-                                },
-                                onDirectTransfer = if (otherMounts.isNotEmpty()) {
-                                    { targetMount -> viewModel.transferUsbToUsb(game, targetMount) }
-                                } else null
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SectionHeader(
-    icon: ImageVector,
-    title: String,
-    count: Int,
-    subtitle: String? = null
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
-        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-        if (count > 0) {
+            // ── Header ──
             Surface(
                 color = MaterialTheme.colorScheme.primaryContainer,
-                shape = RoundedCornerShape(8.dp)
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Text("$count", style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                    color = MaterialTheme.colorScheme.onPrimaryContainer)
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Usb, null,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Transférer les jeux",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        Text(
+                            if (mounts.isEmpty()) "Aucune USB détectée"
+                            else "${mounts.size} USB • Sélectionnez les jeux à transférer",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                    IconButton(
+                        onClick = {
+                            viewModel.refreshUsbMounts()
+                            viewModel.refreshTransferGames()
+                        }
+                    ) {
+                        if (uiState.transferState.isLoading) {
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Default.Refresh, "Rafraîchir",
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                        }
+                    }
+                }
+            }
+
+            if (mounts.isEmpty() && !uiState.transferState.isLoading) {
+                NoUsbTransferPlaceholder(modifier = Modifier.weight(1f))
+                return@Column
+            }
+
+            // ── Source USB selector (if multiple) ──
+            if (mounts.size > 1) {
+                ScrollableTabRow(
+                    selectedTabIndex = mounts.indexOfFirst { it.mountPoint == selectedSource?.mountPoint }.coerceAtLeast(0),
+                    edgePadding = 12.dp,
+                    containerColor = MaterialTheme.colorScheme.surface
+                ) {
+                    mounts.forEach { mount ->
+                        Tab(
+                            selected = mount.mountPoint == selectedSource?.mountPoint,
+                            onClick = { viewModel.setTransferSourceMount(mount.mountPoint) },
+                            text = {
+                                Text(
+                                    mount.mountPoint.substringAfterLast('/'),
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                            },
+                            icon = { Icon(Icons.Default.Usb, null, modifier = Modifier.size(16.dp)) }
+                        )
+                    }
+                }
+            }
+
+            HorizontalDivider()
+
+            // ── Select All bar ──
+            AnimatedVisibility(visible = sourceGames.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        if (selectedIds.isEmpty()) "${sourceGames.size} jeux disponibles"
+                        else "${selectedIds.size}/${sourceGames.size} sélectionné(s)",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = if (selectedIds.isNotEmpty()) FontWeight.Bold else FontWeight.Normal,
+                        color = if (selectedIds.isNotEmpty()) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        TextButton(
+                            onClick = viewModel::selectAllTransferGames,
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                        ) { Text("Tout", style = MaterialTheme.typography.labelMedium) }
+                        TextButton(
+                            onClick = viewModel::clearTransferSelection,
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                            enabled = selectedIds.isNotEmpty()
+                        ) { Text("Aucun", style = MaterialTheme.typography.labelMedium) }
+                    }
+                }
+            }
+
+            // ── Game List ──
+            if (sourceGames.isEmpty() && !uiState.transferState.isLoading) {
+                Column(
+                    modifier = Modifier.weight(1f).padding(32.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Icon(Icons.Default.VideogameAssetOff, null,
+                        modifier = Modifier.size(56.dp),
+                        tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+                    Spacer(Modifier.height(12.dp))
+                    Text("Aucun jeu UL trouvé sur cette clé",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(6.dp))
+                    Text("Format attendu: ul.cfg + fichiers ul.*",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.outline,
+                        textAlign = TextAlign.Center)
+                }
+            } else {
+                LazyColumn(
+                    contentPadding = PaddingValues(
+                        start = 16.dp, end = 16.dp, top = 4.dp, bottom = 100.dp
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    // Active transfers
+                    val activeTransfers = uiState.transferState.activeTransfers
+                    if (activeTransfers.isNotEmpty()) {
+                        item {
+                            Text("En cours",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(top = 4.dp, bottom = 2.dp))
+                        }
+                        items(activeTransfers.entries.toList(), key = { "active_${it.key}" }) { (gameId, prog) ->
+                            ActiveTransferRow(gameId = gameId, progress = prog)
+                        }
+                        item { HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp)) }
+                    }
+
+                    items(sourceGames, key = { it.gameId }) { game ->
+                        val isSelected = game.gameId in selectedIds
+                        val activeProgress = uiState.transferState.activeTransfers[game.gameId]
+                        TransferGameRow(
+                            game = game,
+                            isSelected = isSelected,
+                            activeProgress = activeProgress,
+                            onToggle = { viewModel.toggleTransferSelection(game) }
+                        )
+                    }
+                }
             }
         }
-        subtitle?.let {
-            Text("($it)", style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.outline)
-        }
-        HorizontalDivider(modifier = Modifier.weight(1f),
-            color = MaterialTheme.colorScheme.outlineVariant)
+    }
+
+    // ── Destination Dialog ──
+    if (showDestDialog) {
+        TransferDestinationDialog(
+            selectedCount = selectedIds.size,
+            otherMounts = otherMounts,
+            onDismiss = { showDestDialog = false },
+            onToInternal = {
+                showDestDialog = false
+                viewModel.batchTransferToInternal()
+            },
+            onToMount = { mount ->
+                showDestDialog = false
+                viewModel.batchTransferToMount(mount.mountPoint)
+            }
+        )
     }
 }
 
 @Composable
-private fun UsbGameRow(
+private fun TransferGameRow(
     game: UsbGame,
-    progress: TransferProgress?,
-    primaryLabel: String,
-    primaryIcon: ImageVector,
-    availableMounts: List<MountInfo>,
-    onTransfer: (String) -> Unit,
-    onDirectTransfer: ((String) -> Unit)? = null
+    isSelected: Boolean,
+    activeProgress: TransferProgress?,
+    onToggle: () -> Unit
 ) {
-    var showMountPicker by remember { mutableStateOf(false) }
-    var showDirectMountPicker by remember { mutableStateOf(false) }
-
     Card(
+        onClick = onToggle,
         shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth().animateContentSize(spring(stiffness = Spring.StiffnessMediumLow))
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer
+            else MaterialTheme.colorScheme.surfaceContainerLow
+        ),
+        modifier = Modifier.fillMaxWidth().animateContentSize()
     ) {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                // Game icon
-                Surface(
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.size(42.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                        Icon(Icons.Default.VideogameAsset, null,
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.size(22.dp))
-                    }
-                }
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Checkbox(
+                    checked = isSelected,
+                    onCheckedChange = { onToggle() },
+                    modifier = Modifier.size(20.dp)
+                )
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(game.gameName, style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        game.gameName,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
+                        else MaterialTheme.colorScheme.onSurface
+                    )
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(game.gameId, style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary)
+                        Text(game.gameId,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                            else MaterialTheme.colorScheme.primary)
                         Text("•", style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.outline)
                         Text(if (game.isCd) "CD" else "DVD",
@@ -255,151 +286,137 @@ private fun UsbGameRow(
                             color = MaterialTheme.colorScheme.outline)
                         Text("•", style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.outline)
-                        Text(formatSize(game.sizeBytes), style = MaterialTheme.typography.labelSmall,
+                        Text(formatTransferSize(game.sizeBytes),
+                            style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.outline)
                     }
+                }
+                if (activeProgress?.isDone == true) {
+                    Icon(Icons.Default.CheckCircle, null,
+                        tint = Color(0xFF4CAF50), modifier = Modifier.size(20.dp))
                 }
             }
 
             // Transfer progress
-            AnimatedVisibility(visible = progress != null && !progress.isDone) {
-                progress?.let {
-                    Column {
+            activeProgress?.let { prog ->
+                if (!prog.isDone) {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Row(modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Partie ${it.currentPart}/${it.totalParts}  ${formatSize(it.bytesTransferred)} / ${formatSize(it.bytesTotal)}",
+                            Text("Partie ${prog.currentPart}/${prog.totalParts}",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text("%.0f%%".format(it.fraction * 100),
+                            Text("%.0f%%".format(prog.fraction * 100),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.primary)
                         }
-                        Spacer(Modifier.height(4.dp))
                         LinearProgressIndicator(
-                            progress = { it.fraction },
-                            modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp))
+                            progress = { prog.fraction },
+                            modifier = Modifier.fillMaxWidth().height(4.dp)
+                                .clip(RoundedCornerShape(2.dp))
                         )
                     }
                 }
-            }
-
-            // Done state
-            AnimatedVisibility(visible = progress?.isDone == true) {
-                Row(verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF4CAF50),
-                        modifier = Modifier.size(16.dp))
-                    Text("Transfert terminé", style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFF4CAF50))
-                }
-            }
-
-            // Error state
-            progress?.error?.let { err ->
-                Text("Erreur: $err", style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.error)
-            }
-
-            // Action buttons
-            if (progress == null || progress.isDone) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // Primary action
-                    Button(
-                        onClick = {
-                            if (availableMounts.size == 1) {
-                                onTransfer(availableMounts.first().mountPoint)
-                            } else if (availableMounts.isEmpty()) {
-                                onTransfer("internal")
-                            } else {
-                                showMountPicker = true
-                            }
-                        },
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(primaryIcon, null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(primaryLabel, style = MaterialTheme.typography.labelMedium,
-                            maxLines = 1)
-                    }
-
-                    // USB→USB direct transfer (when 2nd USB is available)
-                    if (onDirectTransfer != null && availableMounts.isNotEmpty()) {
-                        OutlinedButton(
-                            onClick = {
-                                if (availableMounts.size == 1) {
-                                    onDirectTransfer(availableMounts.first().mountPoint)
-                                } else {
-                                    showDirectMountPicker = true
-                                }
-                            },
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-                        ) {
-                            Icon(Icons.Default.SwapHoriz, null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("USB→USB", style = MaterialTheme.typography.labelMedium)
-                        }
-                    }
+                prog.error?.let { err ->
+                    Text("Erreur: $err",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error)
                 }
             }
         }
     }
-
-    // Mount picker dropdown for primary action
-    if (showMountPicker) {
-        MountPickerDialog(
-            mounts = availableMounts,
-            title = primaryLabel,
-            onDismiss = { showMountPicker = false },
-            onSelect = { mount ->
-                showMountPicker = false
-                onTransfer(mount.mountPoint)
-            }
-        )
-    }
-
-    // Mount picker dropdown for direct USB→USB
-    if (showDirectMountPicker && onDirectTransfer != null) {
-        MountPickerDialog(
-            mounts = availableMounts,
-            title = "Choisir USB destination",
-            onDismiss = { showDirectMountPicker = false },
-            onSelect = { mount ->
-                showDirectMountPicker = false
-                onDirectTransfer(mount.mountPoint)
-            }
-        )
-    }
 }
 
 @Composable
-private fun MountPickerDialog(
-    mounts: List<MountInfo>,
-    title: String,
+private fun ActiveTransferRow(gameId: String, progress: TransferProgress) {
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        shape = RoundedCornerShape(10.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(gameId, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Medium)
+                Text("%.0f%%".format(progress.fraction * 100),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary)
+            }
+            LinearProgressIndicator(
+                progress = { progress.fraction },
+                modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp))
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TransferDestinationDialog(
+    selectedCount: Int,
+    otherMounts: List<MountInfo>,
     onDismiss: () -> Unit,
-    onSelect: (MountInfo) -> Unit
+    onToInternal: () -> Unit,
+    onToMount: (MountInfo) -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        icon = { Icon(Icons.Default.Usb, null) },
-        title = { Text(title) },
+        icon = { Icon(Icons.Default.Send, null) },
+        title = { Text("Destination — $selectedCount jeu(x)") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                mounts.forEach { mount ->
+                Text("Choisissez où copier les jeux sélectionnés :",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+                // Internal default folder
+                Card(
+                    onClick = onToInternal,
+                    shape = RoundedCornerShape(10.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.padding(14.dp).fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.PhoneAndroid, null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(22.dp))
+                        Column {
+                            Text("Stockage interne (défaut)",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer)
+                            Text("Dossier UL par défaut",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f))
+                        }
+                    }
+                }
+
+                // Other USB mounts
+                otherMounts.forEach { mount ->
                     Card(
-                        onClick = { onSelect(mount) },
+                        onClick = { onToMount(mount) },
                         shape = RoundedCornerShape(10.dp)
                     ) {
                         Row(
-                            modifier = Modifier.padding(12.dp).fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.padding(14.dp).fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(Icons.Default.UsbOff, null, tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.Usb, null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(22.dp))
                             Column {
-                                Text(mount.mountPoint, style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Medium)
+                                Text(
+                                    "USB: ${mount.mountPoint.substringAfterLast('/')}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium
+                                )
                                 Text(mount.fsType.uppercase(),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.outline)
@@ -417,27 +434,29 @@ private fun MountPickerDialog(
 }
 
 @Composable
-private fun NoUsbPlaceholder() {
+private fun NoUsbTransferPlaceholder(modifier: Modifier = Modifier) {
     Column(
-        modifier = Modifier.fillMaxSize().padding(32.dp),
+        modifier = modifier.padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Icon(Icons.Default.Usb, null, modifier = Modifier.size(72.dp),
+        Icon(Icons.Default.Usb, null,
+            modifier = Modifier.size(72.dp),
             tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
         Spacer(Modifier.height(16.dp))
-        Text("Aucune clé USB détectée", style = MaterialTheme.typography.titleMedium,
+        Text("Aucune clé USB détectée",
+            style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(8.dp))
         Text(
-            "Branchez une clé USB contenant des jeux au format UL (ul.cfg + fichiers ul.*)",
+            "Branchez une clé USB OTG contenant des jeux au format UL (ul.cfg + ul.*)",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.outline,
             textAlign = TextAlign.Center
         )
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(6.dp))
         Text(
-            "Android ne gère qu'une USB à la fois en OTG.\nPour transférer vers une 2e USB, copiez d'abord en interne, puis rebranchez la 2e USB.",
+            "Si la clé est branchée, appuyez sur le bouton rafraîchir en haut.",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.outline.copy(alpha = 0.7f),
             textAlign = TextAlign.Center,
@@ -446,7 +465,7 @@ private fun NoUsbPlaceholder() {
     }
 }
 
-private fun formatSize(bytes: Long): String = when {
+private fun formatTransferSize(bytes: Long): String = when {
     bytes >= 1_073_741_824L -> "%.1f Go".format(bytes / 1_073_741_824.0)
     bytes >= 1_048_576L     -> "%.0f Mo".format(bytes / 1_048_576.0)
     bytes >= 1024L          -> "%.0f Ko".format(bytes / 1024.0)

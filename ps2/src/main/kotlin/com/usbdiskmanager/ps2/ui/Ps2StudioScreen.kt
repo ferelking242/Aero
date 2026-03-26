@@ -180,7 +180,7 @@ fun Ps2StudioScreen(
                                         Ps2Tab.MERGE_CFG  -> "Fusionner CFG"
                                         Ps2Tab.UL_MANAGER -> "UL Manager"
                                         Ps2Tab.DOWNLOAD   -> "Télécharger"
-                                        Ps2Tab.TRANSFER   -> "Transfert USB"
+                                        Ps2Tab.TRANSFER   -> "Transférer"
                                     },
                                     fontWeight = if (uiState.selectedTab == tab)
                                         FontWeight.Bold else FontWeight.Normal
