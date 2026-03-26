@@ -128,6 +128,12 @@ class UlCfgManager @Inject constructor() {
         }
     }
 
+    /**
+     * Public wrapper around writeEntries — used by UlCfgMergerScreen to write
+     * a temporary file before merging, without exposing the internal implementation.
+     */
+    fun writeEntriesPublic(file: File, entries: List<UlEntry>) = writeEntries(file, entries)
+
     // ──────────────────────────────────────────────────────────────
     // Private helpers
     // ──────────────────────────────────────────────────────────────

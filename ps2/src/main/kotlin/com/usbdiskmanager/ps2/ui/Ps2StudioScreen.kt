@@ -49,6 +49,14 @@ fun Ps2StudioScreen(
     val context = LocalContext.current
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
+    var hasStorageAccess by remember {
+        mutableStateOf(
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
+                Environment.isExternalStorageManager()
+            else true
+        )
+    }
+
     val folderPickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
     ) { uri: Uri? ->
@@ -57,12 +65,27 @@ fun Ps2StudioScreen(
 
     val manageStorageLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
-    ) { viewModel.scan() }
+    ) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            hasStorageAccess = Environment.isExternalStorageManager()
+        }
+        viewModel.scan()
+        viewModel.scanPhone()
+    }
 
-    val hasStorageAccess = remember {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
-            Environment.isExternalStorageManager()
-        else true
+    // Re-check storage permission when coming back from settings
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            hasStorageAccess = Environment.isExternalStorageManager()
+        }
+    }
+
+    // Auto-load USB mounts + transfer games when switching to Transfer tab
+    LaunchedEffect(uiState.selectedTab) {
+        if (uiState.selectedTab == Ps2Tab.TRANSFER) {
+            viewModel.refreshUsbMounts()
+            viewModel.refreshTransferGames()
+        }
     }
 
     var showBatchDialog by remember { mutableStateOf(false) }
@@ -180,7 +203,7 @@ fun Ps2StudioScreen(
                                         Ps2Tab.MERGE_CFG  -> "Fusionner CFG"
                                         Ps2Tab.UL_MANAGER -> "UL Manager"
                                         Ps2Tab.DOWNLOAD   -> "Télécharger"
-                                        Ps2Tab.TRANSFER   -> "Transférer"
+                                        Ps2Tab.TRANSFER   -> "Transfert"
                                     },
                                     fontWeight = if (uiState.selectedTab == tab)
                                         FontWeight.Bold else FontWeight.Normal

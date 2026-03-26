@@ -1,5 +1,7 @@
 package com.usbdiskmanager.ps2.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.*
@@ -35,6 +37,24 @@ fun UsbTransferScreen(viewModel: Ps2ViewModel) {
     val otherMounts = mounts.filter { it.mountPoint != selectedSource?.mountPoint }
 
     var showDestDialog by remember { mutableStateOf(false) }
+    var customDestMount by remember { mutableStateOf<String?>(null) }
+
+    val folderPickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        uri?.let { treeUri ->
+            val path = treeUri.path
+            if (path != null) {
+                val resolved = when {
+                    path.contains("primary:") ->
+                        "${android.os.Environment.getExternalStorageDirectory()}/${path.substringAfter("primary:")}"
+                    else -> path
+                }
+                customDestMount = resolved
+                viewModel.batchTransferToMount(resolved)
+            }
+        }
+    }
 
     LaunchedEffect(selectedSource?.mountPoint) {
         if (selectedSource != null && sourceMount != selectedSource.mountPoint) {
@@ -224,6 +244,7 @@ fun UsbTransferScreen(viewModel: Ps2ViewModel) {
     if (showDestDialog) {
         TransferDestinationDialog(
             selectedCount = selectedIds.size,
+            hasOneUsbOnly = mounts.size <= 1,
             otherMounts = otherMounts,
             onDismiss = { showDestDialog = false },
             onToInternal = {
@@ -233,6 +254,10 @@ fun UsbTransferScreen(viewModel: Ps2ViewModel) {
             onToMount = { mount ->
                 showDestDialog = false
                 viewModel.batchTransferToMount(mount.mountPoint)
+            },
+            onPickCustomFolder = {
+                showDestDialog = false
+                folderPickerLauncher.launch(null)
             }
         )
     }
@@ -354,10 +379,12 @@ private fun ActiveTransferRow(gameId: String, progress: TransferProgress) {
 @Composable
 private fun TransferDestinationDialog(
     selectedCount: Int,
+    hasOneUsbOnly: Boolean,
     otherMounts: List<MountInfo>,
     onDismiss: () -> Unit,
     onToInternal: () -> Unit,
-    onToMount: (MountInfo) -> Unit
+    onToMount: (MountInfo) -> Unit,
+    onPickCustomFolder: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -365,9 +392,14 @@ private fun TransferDestinationDialog(
         title = { Text("Destination — $selectedCount jeu(x)") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Choisissez où copier les jeux sélectionnés :",
+                Text(
+                    if (hasOneUsbOnly)
+                        "Choisissez le dossier de destination :"
+                    else
+                        "Choisissez où copier les jeux sélectionnés :",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
 
                 // Internal default folder
                 Card(
@@ -397,7 +429,31 @@ private fun TransferDestinationDialog(
                     }
                 }
 
-                // Other USB mounts
+                // Custom folder picker
+                Card(
+                    onClick = onPickCustomFolder,
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(14.dp).fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.FolderOpen, null,
+                            tint = MaterialTheme.colorScheme.secondary,
+                            modifier = Modifier.size(22.dp))
+                        Column {
+                            Text("Choisir un dossier…",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium)
+                            Text("Sélectionner un répertoire personnalisé",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.outline)
+                        }
+                    }
+                }
+
+                // Other USB mounts (only visible when 2+ USBs)
                 otherMounts.forEach { mount ->
                     Card(
                         onClick = { onToMount(mount) },
@@ -413,7 +469,7 @@ private fun TransferDestinationDialog(
                                 modifier = Modifier.size(22.dp))
                             Column {
                                 Text(
-                                    "USB: ${mount.mountPoint.substringAfterLast('/')}",
+                                    "Transfert direct → USB: ${mount.mountPoint.substringAfterLast('/')}",
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.Medium
                                 )

@@ -101,6 +101,7 @@ class UsbMonitorService : Service() {
         val notification = buildNotification()
         startForegroundCompat(notification)
         usbRepository.refreshConnectedDevices()
+        autoMountAllConnectedDevices()
 
         // START_STICKY: Android automatically restarts the service if killed
         return START_STICKY
@@ -154,6 +155,23 @@ class UsbMonitorService : Service() {
             Timber.d("WakeLock released")
         } catch (e: Exception) {
             Timber.w("WakeLock release failed: ${e.message}")
+        }
+    }
+
+    // ─── Auto-mount on startup ────────────────────────────────────────────────
+
+    private fun autoMountAllConnectedDevices() {
+        serviceScope.launch {
+            delay(3000) // wait for Android to enumerate devices
+            val devices = usbRepository.connectedDevices.value
+            Timber.i("Auto-mounting ${devices.size} already-connected USB device(s)")
+            for (device in devices) {
+                if (!device.isMounted) {
+                    Timber.i("Auto-mounting on startup: ${device.name} (${device.id})")
+                    usbRepository.mountDevice(device.id)
+                }
+            }
+            updateNotification()
         }
     }
 

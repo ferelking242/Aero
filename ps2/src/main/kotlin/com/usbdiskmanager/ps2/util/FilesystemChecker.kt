@@ -40,24 +40,37 @@ class FilesystemChecker @Inject constructor() {
      * Returns a list of all external/USB mount points, deduplicated.
      * The same USB can appear at both /storage/XXXX-XXXX and /mnt/media_rw/XXXX-XXXX.
      * We prefer /storage/ over /mnt/media_rw/ and keep only one entry per volume.
+     * Deduplication uses both folder name AND block device to avoid false duplicates.
      */
     fun listExternalMounts(): List<MountInfo> {
         val all = readMounts().filter { isExternalMountPoint(it.mountPoint, it.fsType) }
 
-        val seen = mutableSetOf<String>()
+        val seenNames = mutableSetOf<String>()
+        val seenBlocks = mutableSetOf<String>()
         val deduped = mutableListOf<MountInfo>()
 
         // First pass: prefer /storage/ mounts (user-accessible)
         for (m in all) {
-            val key = File(m.mountPoint).name.lowercase()
-            if (m.mountPoint.startsWith("/storage/") && seen.add(key)) {
+            val nameKey = File(m.mountPoint).name.lowercase()
+            val blockKey = m.blockDevice.lowercase().let {
+                // Normalize: /dev/block/sda1 and /dev/block/sda are the same disk
+                it.trimEnd('0', '1', '2', '3', '4', '5', '6', '7', '8', '9')
+            }
+            val isNewByName = seenNames.add(nameKey)
+            val isNewByBlock = if (m.blockDevice != "vold" && m.blockDevice.isNotBlank())
+                seenBlocks.add(blockKey) else true
+            if (m.mountPoint.startsWith("/storage/") && isNewByName && isNewByBlock) {
                 deduped.add(m)
             }
         }
         // Second pass: add remaining mounts not already covered
         for (m in all) {
-            val key = File(m.mountPoint).name.lowercase()
-            if (!m.mountPoint.startsWith("/storage/") && seen.add(key)) {
+            val nameKey = File(m.mountPoint).name.lowercase()
+            val blockKey = m.blockDevice.lowercase().trimEnd('0','1','2','3','4','5','6','7','8','9')
+            val isNewByName = seenNames.add(nameKey)
+            val isNewByBlock = if (m.blockDevice != "vold" && m.blockDevice.isNotBlank())
+                seenBlocks.add(blockKey) else true
+            if (!m.mountPoint.startsWith("/storage/") && isNewByName && isNewByBlock) {
                 deduped.add(m)
             }
         }
