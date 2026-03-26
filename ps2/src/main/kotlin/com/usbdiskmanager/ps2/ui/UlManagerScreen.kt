@@ -1,5 +1,7 @@
 package com.usbdiskmanager.ps2.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -11,22 +13,97 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.usbdiskmanager.ps2.data.converter.UlCfgManager
 import com.usbdiskmanager.ps2.domain.model.UsbGame
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UlManagerScreen(viewModel: Ps2ViewModel) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val cfgManager = remember { UlCfgManager() }
 
     var gameToRename by remember { mutableStateOf<UsbGame?>(null) }
     var gameToDelete by remember { mutableStateOf<UsbGame?>(null) }
     var renameInput by remember { mutableStateOf("") }
+
+    // Manual ul.cfg mode
+    var manualCfgPath by remember { mutableStateOf<String?>(null) }
+    var manualGames by remember { mutableStateOf<List<UsbGame>>(emptyList()) }
+    var manualLoading by remember { mutableStateOf(false) }
+    var manualError by remember { mutableStateOf<String?>(null) }
+    var isManualMode by remember { mutableStateOf(false) }
+
+    // Manual folder picker (for USB path)
+    val folderPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        uri?.let { treeUri ->
+            val path = treeUri.path
+            if (path != null) {
+                val resolved = when {
+                    path.contains("primary:") ->
+                        "${android.os.Environment.getExternalStorageDirectory()}/${path.substringAfter("primary:")}"
+                    path.contains(":") -> {
+                        val after = path.substringAfter(":")
+                        if (after.startsWith("/")) after else "/$after"
+                    }
+                    else -> path
+                }
+                isManualMode = false
+                viewModel.selectUlManagerMount(resolved)
+            }
+        }
+    }
+
+    // Manual ul.cfg file picker
+    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let {
+            scope.launch {
+                manualLoading = true
+                manualError = null
+                withContext(Dispatchers.IO) {
+                    try {
+                        val temp = File(context.cacheDir, "ul_manager_manual.cfg")
+                        context.contentResolver.openInputStream(uri)?.use { inp ->
+                            temp.outputStream().use { out -> inp.copyTo(out) }
+                        }
+                        val entries = cfgManager.readAllEntries(temp)
+                        val rawPath = uri.lastPathSegment ?: "manual"
+                        manualCfgPath = rawPath
+                        isManualMode = true
+                        manualGames = entries.map { entry ->
+                            UsbGame(
+                                gameName = entry.gameName.trimEnd('\u0000'),
+                                gameId = entry.gameIdClean,
+                                numParts = entry.numParts,
+                                isCd = entry.isCd,
+                                mountPoint = rawPath
+                            )
+                        }
+                        if (manualGames.isEmpty()) {
+                            manualError = "Aucun jeu trouvé dans ce fichier ul.cfg"
+                        }
+                    } catch (e: Exception) {
+                        manualError = "Erreur lecture ul.cfg: ${e.message}"
+                    }
+                }
+                manualLoading = false
+            }
+        }
+    }
 
     // Rename dialog
     gameToRename?.let { game ->
@@ -59,7 +136,13 @@ fun UlManagerScreen(viewModel: Ps2ViewModel) {
                 Button(
                     onClick = {
                         if (renameInput.isNotBlank()) {
-                            viewModel.renameUlGame(game, renameInput.trim())
+                            if (isManualMode) {
+                                manualGames = manualGames.map { g ->
+                                    if (g.gameId == game.gameId) g.copy(gameName = renameInput.trim()) else g
+                                }
+                            } else {
+                                viewModel.renameUlGame(game, renameInput.trim())
+                            }
                         }
                         gameToRename = null
                     },
@@ -91,19 +174,28 @@ fun UlManagerScreen(viewModel: Ps2ViewModel) {
                         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(game.gameName, fontWeight = FontWeight.Bold)
                             Text(game.gameId, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
-                            Text("${game.numParts} partie(s) • ${formatBytes(game.sizeBytes)}", style = MaterialTheme.typography.bodySmall)
+                            Text("${game.numParts} partie(s)", style = MaterialTheme.typography.bodySmall)
                         }
                     }
-                    Text(
-                        "Cette action supprimera l'entrée ul.cfg ET tous les fichiers de parts (ul.*.*) associés. Elle est irréversible.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
+                    if (!isManualMode) {
+                        Text(
+                            "Cette action supprimera l'entrée ul.cfg ET tous les fichiers de parts associés. Irréversible.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
                 }
             },
             confirmButton = {
                 Button(
-                    onClick = { viewModel.deleteUlGame(game); gameToDelete = null },
+                    onClick = {
+                        if (isManualMode) {
+                            manualGames = manualGames.filter { it.gameId != game.gameId }
+                        } else {
+                            viewModel.deleteUlGame(game)
+                        }
+                        gameToDelete = null
+                    },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) {
                     Icon(Icons.Default.Delete, null, Modifier.size(16.dp))
@@ -119,44 +211,41 @@ fun UlManagerScreen(viewModel: Ps2ViewModel) {
 
     Column(modifier = Modifier.fillMaxSize()) {
 
-        // ── Mount point selector ──
-        Surface(
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 2.dp
-        ) {
+        // ── Header: USB selector + manual options ──
+        Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 2.dp) {
             Column(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(Icons.Default.ManageSearch, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        Icons.Default.ManageSearch, null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
                     Text(
                         "UL Manager — Gérer les jeux USBExtreme/OPL",
                         style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f)
                     )
+                    IconButton(onClick = {
+                        viewModel.refreshUsbMounts()
+                        if (!isManualMode) {
+                            uiState.ulManagerMount?.let { viewModel.loadUlGames(it) }
+                        }
+                    }) {
+                        Icon(Icons.Default.Refresh, null)
+                    }
                 }
 
-                if (uiState.availableUsbMounts.isEmpty()) {
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(Icons.Default.Warning, null, tint = Color(0xFFFF9800), modifier = Modifier.size(16.dp))
-                            Text(
-                                "Aucun périphérique USB détecté. Branchez une clé USB.",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                    }
-                } else {
+                // USB chip selector
+                if (uiState.availableUsbMounts.isNotEmpty()) {
                     Text(
-                        "Sélectionner la clé USB :",
+                        "Clé USB détectée :",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -165,13 +254,16 @@ fun UlManagerScreen(viewModel: Ps2ViewModel) {
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         uiState.availableUsbMounts.forEach { mount ->
-                            val isSelected = mount.mountPoint == uiState.ulManagerMount
+                            val isSelected = !isManualMode && mount.mountPoint == uiState.ulManagerMount
                             FilterChip(
                                 selected = isSelected,
-                                onClick = { viewModel.selectUlManagerMount(mount.mountPoint) },
+                                onClick = {
+                                    isManualMode = false
+                                    viewModel.selectUlManagerMount(mount.mountPoint)
+                                },
                                 label = {
                                     Text(
-                                        java.io.File(mount.mountPoint).name,
+                                        File(mount.mountPoint).name,
                                         style = MaterialTheme.typography.labelSmall,
                                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                                     )
@@ -182,14 +274,102 @@ fun UlManagerScreen(viewModel: Ps2ViewModel) {
                             )
                         }
                     }
+                } else {
+                    // No USB auto-detected
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Info, null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                "Aucune USB auto-détectée — utilisez les boutons ci-dessous",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+
+                // Manual access buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = { folderPicker.launch(null) },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
+                    ) {
+                        Icon(Icons.Default.FolderOpen, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Choisir dossier USB", style = MaterialTheme.typography.labelMedium)
+                    }
+                    OutlinedButton(
+                        onClick = { filePicker.launch("*/*") },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
+                    ) {
+                        Icon(Icons.Default.FileOpen, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Ouvrir ul.cfg", style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+
+                // Manual mode banner
+                if (isManualMode && manualCfgPath != null) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.tertiaryContainer,
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(8.dp).fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.FileOpen, null,
+                                tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                "Mode fichier manuel: ${manualCfgPath?.substringAfterLast('/')?.take(30)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                modifier = Modifier.weight(1f)
+                            )
+                            TextButton(
+                                onClick = {
+                                    isManualMode = false
+                                    manualCfgPath = null
+                                    manualGames = emptyList()
+                                    manualError = null
+                                },
+                                contentPadding = PaddingValues(4.dp)
+                            ) {
+                                Text("Quitter", style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    }
                 }
             }
         }
 
         HorizontalDivider()
 
-        // ── Error / loading state ──
-        uiState.ulManagerError?.let { err ->
+        // ── Error / loading states ──
+        val displayError = if (isManualMode) manualError else uiState.ulManagerError
+        displayError?.let { err ->
             Card(
                 modifier = Modifier.fillMaxWidth().padding(12.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
@@ -199,14 +379,17 @@ fun UlManagerScreen(viewModel: Ps2ViewModel) {
                     Column(Modifier.weight(1f)) {
                         Text(err, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer)
                     }
-                    IconButton(onClick = { viewModel.clearUlManagerError() }) {
+                    IconButton(onClick = {
+                        if (isManualMode) manualError = null else viewModel.clearUlManagerError()
+                    }) {
                         Icon(Icons.Default.Close, null)
                     }
                 }
             }
         }
 
-        if (uiState.ulManagerLoading) {
+        val displayLoading = if (isManualMode) manualLoading else uiState.ulManagerLoading
+        if (displayLoading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     CircularProgressIndicator()
@@ -216,7 +399,11 @@ fun UlManagerScreen(viewModel: Ps2ViewModel) {
             return@Column
         }
 
-        if (uiState.ulManagerMount == null) {
+        // Need mount or manual mode
+        val displayGames = if (isManualMode) manualGames else uiState.ulGames
+        val hasMount = isManualMode || uiState.ulManagerMount != null
+
+        if (!hasMount) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -229,7 +416,7 @@ fun UlManagerScreen(viewModel: Ps2ViewModel) {
                         modifier = Modifier.size(64.dp)
                     )
                     Text(
-                        "Sélectionnez une clé USB ci-dessus\npour gérer ses jeux USBExtreme",
+                        "Sélectionnez une clé USB\nou ouvrez un fichier ul.cfg manuellement",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
@@ -239,7 +426,7 @@ fun UlManagerScreen(viewModel: Ps2ViewModel) {
             return@Column
         }
 
-        if (uiState.ulGames.isEmpty() && uiState.ulManagerError == null) {
+        if (displayGames.isEmpty() && displayError == null) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -252,13 +439,13 @@ fun UlManagerScreen(viewModel: Ps2ViewModel) {
                         modifier = Modifier.size(64.dp)
                     )
                     Text(
-                        "Aucun jeu USBExtreme trouvé\nsur cette clé USB",
+                        "Aucun jeu USBExtreme trouvé",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
                     )
                     Text(
-                        "Les jeux doivent être au format USBExtreme\n(fichiers ul.*.* + ul.cfg à la racine)",
+                        "Les jeux doivent être au format USBExtreme\n(ul.cfg + fichiers ul.*.* à la racine)",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                         textAlign = TextAlign.Center
@@ -270,25 +457,18 @@ fun UlManagerScreen(viewModel: Ps2ViewModel) {
 
         // ── Game list header ──
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Icon(Icons.Default.VideogameAsset, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
                 Text(
-                    "${uiState.ulGames.size} jeu(x) USBExtreme",
+                    "${displayGames.size} jeu(x) USBExtreme",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
                 )
-            }
-            IconButton(onClick = {
-                uiState.ulManagerMount?.let { viewModel.loadUlGames(it) }
-            }) {
-                Icon(Icons.Default.Refresh, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
 
@@ -298,7 +478,7 @@ fun UlManagerScreen(viewModel: Ps2ViewModel) {
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.weight(1f)
         ) {
-            items(uiState.ulGames, key = { it.gameId }) { game ->
+            items(displayGames, key = { it.gameId }) { game ->
                 UlGameCard(
                     game = game,
                     onRename = {
@@ -324,12 +504,9 @@ private fun UlGameCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Game icon
             Surface(
                 color = if (game.isCd) MaterialTheme.colorScheme.secondaryContainer
                 else MaterialTheme.colorScheme.primaryContainer,
@@ -365,20 +542,16 @@ private fun UlGameCard(
                 )
                 Spacer(Modifier.height(4.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    InfoBadge(if (game.isCd) "CD" else "DVD", if (game.isCd) Color(0xFF9C27B0) else Color(0xFF1565C0))
-                    InfoBadge("${game.numParts} part(s)", MaterialTheme.colorScheme.onSurfaceVariant)
+                    UlInfoBadge(if (game.isCd) "CD" else "DVD", if (game.isCd) Color(0xFF9C27B0) else Color(0xFF1565C0))
+                    UlInfoBadge("${game.numParts} part(s)", MaterialTheme.colorScheme.onSurfaceVariant)
                     if (game.sizeBytes > 0) {
-                        InfoBadge(formatBytes(game.sizeBytes), MaterialTheme.colorScheme.onSurfaceVariant)
+                        UlInfoBadge(ulFormatBytes(game.sizeBytes), MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
 
-            // Action buttons
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                FilledTonalIconButton(
-                    onClick = onRename,
-                    modifier = Modifier.size(36.dp)
-                ) {
+                FilledTonalIconButton(onClick = onRename, modifier = Modifier.size(36.dp)) {
                     Icon(Icons.Default.Edit, "Renommer", modifier = Modifier.size(18.dp))
                 }
                 FilledTonalIconButton(
@@ -397,7 +570,6 @@ private fun UlGameCard(
             }
         }
 
-        // Part files list (collapsed by default)
         if (game.partFiles.isNotEmpty()) {
             HorizontalDivider(modifier = Modifier.padding(horizontal = 12.dp))
             Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
@@ -414,11 +586,8 @@ private fun UlGameCard(
 }
 
 @Composable
-private fun InfoBadge(text: String, color: Color) {
-    Surface(
-        color = color.copy(alpha = 0.12f),
-        shape = RoundedCornerShape(4.dp)
-    ) {
+private fun UlInfoBadge(text: String, color: Color) {
+    Surface(color = color.copy(alpha = 0.12f), shape = RoundedCornerShape(4.dp)) {
         Text(
             text,
             modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
@@ -430,7 +599,7 @@ private fun InfoBadge(text: String, color: Color) {
     }
 }
 
-private fun formatBytes(bytes: Long): String {
+private fun ulFormatBytes(bytes: Long): String {
     if (bytes <= 0) return "?"
     val gb = bytes / (1024.0 * 1024.0 * 1024.0)
     val mb = bytes / (1024.0 * 1024.0)
