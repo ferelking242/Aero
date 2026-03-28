@@ -29,8 +29,8 @@ class AdBlocker @Inject constructor() {
             if (host != null && filterRules.exactDomains.contains(host)) return true
 
             // Check subdomain matches
-            if (host != null) {
-                var domain = host
+            host?.let { nonNullHost ->
+                var domain: String = nonNullHost
                 while (domain.contains(".")) {
                     domain = domain.substringAfter(".")
                     if (filterRules.exactDomains.contains(domain)) return true
