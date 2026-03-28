@@ -58,8 +58,10 @@ object WebViewFactory {
             // User agent
             userAgentString = if (settings.desktopMode) DESKTOP_USER_AGENT else MOBILE_USER_AGENT
 
-            // Safe browsing
-            safeBrowsingEnabled = settings.safeBrowsing
+            // Safe browsing (API 26+)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                safeBrowsingEnabled = settings.safeBrowsing
+            }
 
             // Viewport
             useWideViewPort = true

@@ -1,4 +1,0 @@
-NOTE: Download the actual gradle-wrapper.jar from https://github.com/gradle/gradle/blob/v8.9.0/gradle/wrapper/gradle-wrapper.jar
-Place it at: gradle/wrapper/gradle-wrapper.jar
-This placeholder file exists to document the requirement.
-The CI/CD pipeline uses actions/setup-java which provides Gradle automatically.
