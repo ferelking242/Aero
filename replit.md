@@ -4,6 +4,17 @@
 
 pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
 
+## Android Browser Project (Velo Browser)
+
+A complete production-ready Android browser app located in `android-browser/`.
+See `android-browser/plan.md` for full architecture docs and `android-browser/README.md` for setup instructions.
+
+Key files:
+- `android-browser/plan.md` — Full architecture plan
+- `android-browser/.github/workflows/build.yml` — CI/CD pipeline (builds APK on push to main)
+- `android-browser/.github/workflows/signed_release.yml` — Signed release pipeline (triggered by tags)
+- `android-browser/setup.sh` — Local setup script
+
 ## Stack
 
 - **Monorepo tool**: pnpm workspaces

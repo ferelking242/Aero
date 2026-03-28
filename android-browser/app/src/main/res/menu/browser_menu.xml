@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@+id/menu_new_tab" android:title="@string/menu_new_tab" />
+    <item android:id="@+id/menu_new_incognito" android:title="@string/menu_new_incognito" />
+    <item android:id="@+id/menu_history" android:title="@string/menu_history" />
+    <item android:id="@+id/menu_bookmarks" android:title="@string/menu_bookmarks" />
+    <item android:id="@+id/menu_downloads" android:title="@string/menu_downloads" />
+    <item android:id="@+id/menu_profiles" android:title="@string/menu_profiles" />
+    <item android:id="@+id/menu_share" android:title="@string/menu_share" />
+    <item android:id="@+id/menu_desktop_mode" android:title="@string/menu_desktop_mode" />
+    <item android:id="@+id/menu_settings" android:title="@string/menu_settings" />
+</menu>

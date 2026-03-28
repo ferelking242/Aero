@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="toolbar_height">52dp</dimen>
+    <dimen name="bottom_bar_height">52dp</dimen>
+    <dimen name="url_bar_height">36dp</dimen>
+    <dimen name="url_bar_radius">18dp</dimen>
+    <dimen name="icon_size">24dp</dimen>
+    <dimen name="tab_avatar_size">48dp</dimen>
+    <dimen name="card_corner_radius">12dp</dimen>
+    <dimen name="spacing_small">4dp</dimen>
+    <dimen name="spacing_medium">8dp</dimen>
+    <dimen name="spacing_large">16dp</dimen>
+</resources>
