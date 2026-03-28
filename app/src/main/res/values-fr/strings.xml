@@ -80,9 +80,6 @@
     <string name="download_cancelled">Annulé</string>
     <string name="no_downloads">Aucun téléchargement pour l\'instant</string>
 
-    <!-- Actions -->
-    <string name="delete">Supprimer</string>
-
     <!-- Menu -->
     <string name="menu_new_tab">Nouvel onglet</string>
     <string name="menu_new_incognito">Nouvel onglet incognito</string>

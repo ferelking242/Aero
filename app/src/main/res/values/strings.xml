@@ -80,9 +80,6 @@
     <string name="download_cancelled">Cancelled</string>
     <string name="no_downloads">No downloads yet</string>
 
-    <!-- Actions -->
-    <string name="delete">Delete</string>
-
     <!-- Menu -->
     <string name="menu_new_tab">New Tab</string>
     <string name="menu_new_incognito">New Incognito Tab</string>
