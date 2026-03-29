@@ -35,12 +35,12 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build Debug APK
-        run: gradle assembleDebug --stacktrace --no-daemon
+        run: ./gradlew assembleDebug --stacktrace --no-daemon
         env:
           GRADLE_OPTS: "-Dorg.gradle.workers.max=2"
 
       - name: Build Release APK (unsigned)
-        run: gradle assembleRelease --stacktrace --no-daemon
+        run: ./gradlew assembleRelease --stacktrace --no-daemon
         env:
           GRADLE_OPTS: "-Dorg.gradle.workers.max=2"
 
@@ -92,7 +92,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Run Lint
-        run: gradle lint --no-daemon
+        run: ./gradlew lint --no-daemon
 
       - name: Upload Lint Report
         uses: actions/upload-artifact@v4
@@ -136,18 +136,19 @@ jobs:
             ## Velo Browser ${{ steps.get_version.outputs.version }}
 
             ### What's included
+            - Per-tab WebView isolation (separate session per tab — instant switching)
             - Multi-profile browsing (separate cookie sessions per account)
             - Built-in ad blocker with bundled EasyList rules
-            - Tab management (multiple tabs, incognito mode)
-            - Full settings system (DataStore-backed)
+            - Chrome-style tab switcher with Tabs / Incognito grouping
+            - Full settings: JavaScript, Images, Desktop Mode, Dark Mode, Ad Blocker, Safe Browsing, 6 search engines
             - Multi-language support (English & French)
             - Download manager with notification support
             - Safe browsing & HTTPS enforcement
-            - Ultra Fast Mode (disables images and heavy scripts)
+            - Ultra Fast Mode
 
             ### Installation
             Download `app-debug.apk` and install on your Android device (API 24+).
-            You may need to enable **Install from unknown sources** in your device settings.
+            Enable **Install from unknown sources** if needed.
 
             > Built from commit: `${{ github.sha }}`
           files: apks/app-debug.apk
