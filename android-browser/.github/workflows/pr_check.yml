@@ -6,6 +6,10 @@ on:
       - main
       - develop
 
+defaults:
+  run:
+    working-directory: android-browser
+
 jobs:
   check:
     name: Validate PR Build
@@ -30,15 +34,15 @@ jobs:
         run: chmod +x gradlew
 
       - name: Check build compiles
-        run: gradle compileDebugKotlin --no-daemon --stacktrace
+        run: ./gradlew compileDebugKotlin --no-daemon --stacktrace
 
       - name: Run Lint
-        run: gradle lintDebug --no-daemon
+        run: ./gradlew lintDebug --no-daemon
 
       - name: Upload Lint Results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: pr-lint-results
-          path: app/build/reports/lint-results-debug.html
+          path: android-browser/app/build/reports/lint-results-debug.html
           retention-days: 3

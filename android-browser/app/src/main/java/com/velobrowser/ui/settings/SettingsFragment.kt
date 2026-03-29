@@ -1,6 +1,7 @@
 package com.velobrowser.ui.settings
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
 import androidx.lifecycle.lifecycleScope
@@ -9,6 +10,7 @@ import androidx.preference.ListPreference
 import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.SwitchPreferenceCompat
+import com.velobrowser.BuildConfig
 import com.velobrowser.R
 import com.velobrowser.data.local.datastore.SettingsDataStore
 import com.velobrowser.domain.repository.HistoryRepository
@@ -33,7 +35,6 @@ class SettingsFragment : PreferenceFragmentCompat() {
         lifecycleScope.launch {
             val settings = settingsDataStore.settings.first()
 
-            // JavaScript
             findPreference<SwitchPreferenceCompat>("pref_javascript")?.apply {
                 isChecked = settings.javascriptEnabled
                 setOnPreferenceChangeListener { _, newValue ->
@@ -42,7 +43,6 @@ class SettingsFragment : PreferenceFragmentCompat() {
                 }
             }
 
-            // Images
             findPreference<SwitchPreferenceCompat>("pref_images")?.apply {
                 isChecked = settings.imagesEnabled
                 setOnPreferenceChangeListener { _, newValue ->
@@ -51,7 +51,6 @@ class SettingsFragment : PreferenceFragmentCompat() {
                 }
             }
 
-            // Ad Blocker
             findPreference<SwitchPreferenceCompat>("pref_adblocker")?.apply {
                 isChecked = settings.adBlockerEnabled
                 setOnPreferenceChangeListener { _, newValue ->
@@ -60,7 +59,6 @@ class SettingsFragment : PreferenceFragmentCompat() {
                 }
             }
 
-            // Ultra Fast Mode
             findPreference<SwitchPreferenceCompat>("pref_ultra_fast")?.apply {
                 isChecked = settings.ultraFastMode
                 setOnPreferenceChangeListener { _, newValue ->
@@ -69,7 +67,23 @@ class SettingsFragment : PreferenceFragmentCompat() {
                 }
             }
 
-            // Safe Browsing
+            findPreference<SwitchPreferenceCompat>("pref_desktop_mode")?.apply {
+                isChecked = settings.desktopMode
+                setOnPreferenceChangeListener { _, newValue ->
+                    lifecycleScope.launch { settingsDataStore.setDesktopMode(newValue as Boolean) }
+                    true
+                }
+            }
+
+            findPreference<SwitchPreferenceCompat>("pref_dark_mode")?.apply {
+                isChecked = settings.darkMode
+                setOnPreferenceChangeListener { _, newValue ->
+                    lifecycleScope.launch { settingsDataStore.setDarkMode(newValue as Boolean) }
+                    Toast.makeText(requireContext(), getString(R.string.restart_to_apply), Toast.LENGTH_SHORT).show()
+                    true
+                }
+            }
+
             findPreference<SwitchPreferenceCompat>("pref_safe_browsing")?.apply {
                 isChecked = settings.safeBrowsing
                 setOnPreferenceChangeListener { _, newValue ->
@@ -78,13 +92,14 @@ class SettingsFragment : PreferenceFragmentCompat() {
                 }
             }
 
-            // Search Engine
             findPreference<ListPreference>("pref_search_engine")?.apply {
                 val engines = mapOf(
                     "https://www.google.com/search?q=" to "Google",
                     "https://duckduckgo.com/?q=" to "DuckDuckGo",
                     "https://www.bing.com/search?q=" to "Bing",
-                    "https://search.brave.com/search?q=" to "Brave"
+                    "https://search.brave.com/search?q=" to "Brave",
+                    "https://search.yahoo.com/search?p=" to "Yahoo",
+                    "https://yandex.com/search/?text=" to "Yandex"
                 )
                 entries = engines.values.toTypedArray()
                 entryValues = engines.keys.toTypedArray()
@@ -95,7 +110,6 @@ class SettingsFragment : PreferenceFragmentCompat() {
                 }
             }
 
-            // Homepage
             findPreference<EditTextPreference>("pref_homepage")?.apply {
                 text = settings.homepage
                 summary = settings.homepage
@@ -107,7 +121,6 @@ class SettingsFragment : PreferenceFragmentCompat() {
                 }
             }
 
-            // Language
             findPreference<ListPreference>("pref_language")?.apply {
                 val languages = LocaleUtils.getSupportedLanguages()
                 entries = languages.map { it.second }.toTypedArray()
@@ -122,7 +135,6 @@ class SettingsFragment : PreferenceFragmentCompat() {
                 }
             }
 
-            // Clear Cache
             findPreference<Preference>("pref_clear_cache")?.setOnPreferenceClickListener {
                 showConfirmDialog(getString(R.string.clear_cache)) {
                     android.webkit.WebStorage.getInstance().deleteAllData()
@@ -131,7 +143,6 @@ class SettingsFragment : PreferenceFragmentCompat() {
                 true
             }
 
-            // Clear History
             findPreference<Preference>("pref_clear_history")?.setOnPreferenceClickListener {
                 showConfirmDialog(getString(R.string.clear_history)) {
                     lifecycleScope.launch {
@@ -142,12 +153,25 @@ class SettingsFragment : PreferenceFragmentCompat() {
                 true
             }
 
-            // Clear Cookies
             findPreference<Preference>("pref_clear_cookies")?.setOnPreferenceClickListener {
                 showConfirmDialog(getString(R.string.clear_cookies)) {
                     android.webkit.CookieManager.getInstance().removeAllCookies(null)
                     android.webkit.CookieManager.getInstance().flush()
                     Toast.makeText(requireContext(), getString(R.string.cookies_cleared), Toast.LENGTH_SHORT).show()
+                }
+                true
+            }
+
+            findPreference<Preference>("pref_version")?.apply {
+                summary = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
+            }
+
+            findPreference<Preference>("pref_open_source")?.setOnPreferenceClickListener {
+                try {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com"))
+                    startActivity(intent)
+                } catch (e: Exception) {
+                    Toast.makeText(requireContext(), getString(R.string.open_source_summary), Toast.LENGTH_SHORT).show()
                 }
                 true
             }

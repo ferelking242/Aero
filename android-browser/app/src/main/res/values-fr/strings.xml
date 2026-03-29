@@ -91,7 +91,21 @@
     <string name="menu_share">Partager</string>
     <string name="menu_desktop_mode">Mode bureau</string>
 
+    <!-- Tabs UI -->
+    <string name="close_all">Tout fermer</string>
+    <string name="tab_count_label">onglets</string>
+    <string name="incognito_tabs_label">onglets incognito</string>
+
+    <!-- Settings additions -->
+    <string name="desktop_mode_summary">Demander la version bureau des sites web</string>
+    <string name="dark_mode">Mode sombre</string>
+    <string name="dark_mode_summary">Utiliser le thème sombre dans tout le navigateur</string>
+    <string name="restart_to_apply">Redémarrez l\'application pour appliquer ce changement</string>
+
     <!-- About -->
-    <string name="app_version">Version 1.0.0</string>
+    <string name="app_version">Version</string>
+    <string name="app_version_value">1.0.0 (1)</string>
+    <string name="open_source">Open Source</string>
+    <string name="open_source_summary">Velo Browser — Rapide, léger et privé</string>
     <string name="about_description">Velo Browser — Rapide, léger et privé.</string>
 </resources>

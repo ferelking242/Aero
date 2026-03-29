@@ -26,6 +26,18 @@
             android:summary="@string/ultra_fast_mode_summary"
             android:defaultValue="false" />
 
+        <SwitchPreferenceCompat
+            android:key="pref_desktop_mode"
+            android:title="@string/desktop_mode"
+            android:summary="@string/desktop_mode_summary"
+            android:defaultValue="false" />
+
+        <SwitchPreferenceCompat
+            android:key="pref_dark_mode"
+            android:title="@string/dark_mode"
+            android:summary="@string/dark_mode_summary"
+            android:defaultValue="false" />
+
     </PreferenceCategory>
 
     <!-- Privacy Settings -->
@@ -79,6 +91,22 @@
         <Preference
             android:key="pref_clear_cookies"
             android:title="@string/clear_cookies" />
+
+    </PreferenceCategory>
+
+    <!-- About -->
+    <PreferenceCategory android:title="@string/settings_about">
+
+        <Preference
+            android:key="pref_version"
+            android:title="@string/app_version"
+            android:summary="@string/app_version_value"
+            android:selectable="false" />
+
+        <Preference
+            android:key="pref_open_source"
+            android:title="@string/open_source"
+            android:summary="@string/open_source_summary" />
 
     </PreferenceCategory>
 

@@ -11,9 +11,19 @@ See `android-browser/plan.md` for full architecture docs and `android-browser/RE
 
 Key files:
 - `android-browser/plan.md` — Full architecture plan
-- `android-browser/.github/workflows/build.yml` — CI/CD pipeline (builds APK on push to main)
+- `android-browser/.github/workflows/build.yml` — CI/CD pipeline (fixed: uses `working-directory: android-browser` + `./gradlew`)
 - `android-browser/.github/workflows/signed_release.yml` — Signed release pipeline (triggered by tags)
 - `android-browser/setup.sh` — Local setup script
+
+### Tab Architecture (Multi-WebView)
+Each browser tab has its own `WebView` instance stored in `BrowserActivity.webViews: LinkedHashMap<String, WebView>`.
+- Tab switching is instant (show/hide WebViews, no reload)
+- Incognito tabs have cookies disabled on their WebView
+- WebView events (onPageStarted, onPageFinished) are scoped per tabId and only update UI if the tab is active
+- WebViews are created lazily and destroyed when their tab is closed
+
+### Settings
+Full settings screen with: JavaScript, Images, Ad Blocker, Ultra Fast Mode, Desktop Mode, Dark Mode, Safe Browsing, Search Engine (6 options), Homepage, Language, Clear cache/history/cookies, About/version info.
 
 ## Stack
 

@@ -10,6 +10,10 @@ on:
       - main
   workflow_dispatch:
 
+defaults:
+  run:
+    working-directory: android-browser
+
 jobs:
   build:
     name: Build Debug & Release APK
@@ -35,12 +39,12 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build Debug APK
-        run: gradle assembleDebug --stacktrace --no-daemon
+        run: ./gradlew assembleDebug --stacktrace --no-daemon
         env:
           GRADLE_OPTS: "-Dorg.gradle.workers.max=2"
 
       - name: Build Release APK (unsigned)
-        run: gradle assembleRelease --stacktrace --no-daemon
+        run: ./gradlew assembleRelease --stacktrace --no-daemon
         env:
           GRADLE_OPTS: "-Dorg.gradle.workers.max=2"
 
@@ -48,7 +52,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: velo-browser-debug-${{ github.sha }}
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: android-browser/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
           if-no-files-found: error
 
@@ -56,7 +60,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: velo-browser-release-unsigned-${{ github.sha }}
-          path: app/build/outputs/apk/release/app-release-unsigned.apk
+          path: android-browser/app/build/outputs/apk/release/app-release-unsigned.apk
           retention-days: 30
           if-no-files-found: error
 
@@ -65,7 +69,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: build-logs-${{ github.sha }}
-          path: app/build/reports/
+          path: android-browser/app/build/reports/
           retention-days: 7
 
   lint:
@@ -92,14 +96,14 @@ jobs:
         run: chmod +x gradlew
 
       - name: Run Lint
-        run: gradle lint --no-daemon
+        run: ./gradlew lint --no-daemon
 
       - name: Upload Lint Report
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: lint-report-${{ github.sha }}
-          path: app/build/reports/lint-results-debug.html
+          path: android-browser/app/build/reports/lint-results-debug.html
           retention-days: 7
 
   release:
@@ -122,6 +126,7 @@ jobs:
 
       - name: Get version from build.gradle.kts
         id: get_version
+        working-directory: android-browser
         run: |
           VERSION=$(grep 'versionName' app/build.gradle.kts | sed 's/.*"\(.*\)".*/\1/')
           echo "version=$VERSION" >> $GITHUB_OUTPUT
@@ -136,10 +141,11 @@ jobs:
             ## Velo Browser ${{ steps.get_version.outputs.version }}
 
             ### What's included
+            - Multi-tab browsing with isolated WebView sessions per tab
             - Multi-profile browsing (separate cookie sessions per account)
             - Built-in ad blocker with bundled EasyList rules
-            - Tab management (multiple tabs, incognito mode)
-            - Full settings system (DataStore-backed)
+            - Chrome-style tab switcher with incognito/normal grouping
+            - Full settings system (JavaScript, images, desktop mode, dark mode, etc.)
             - Multi-language support (English & French)
             - Download manager with notification support
             - Safe browsing & HTTPS enforcement

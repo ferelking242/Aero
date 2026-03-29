@@ -1,6 +1,5 @@
 package com.velobrowser.ui.browser
 
-import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.velobrowser.core.tabs.TabManager
@@ -77,6 +76,12 @@ class BrowserViewModel @Inject constructor(
 
     fun closeTab(tabId: String) {
         tabManager.closeTab(tabId)
+        val active = tabManager.activeTab
+        if (active != null) {
+            _currentUrl.value = active.url
+            _currentTitle.value = active.title
+            _isSecure.value = UrlUtils.isHttps(active.url)
+        }
         if (tabManager.hasNoTabs()) {
             openNewTab()
         }
@@ -89,6 +94,8 @@ class BrowserViewModel @Inject constructor(
             _currentUrl.value = tab.url
             _currentTitle.value = tab.title
             _isSecure.value = UrlUtils.isHttps(tab.url)
+            _pageProgress.value = 0
+            checkBookmarkStatus(tab.url)
         }
     }
 
@@ -99,26 +106,29 @@ class BrowserViewModel @Inject constructor(
         }
     }
 
-    fun onPageStarted(url: String) {
-        _currentUrl.value = url
-        _isSecure.value = UrlUtils.isHttps(url)
-        tabManager.updateTab(activeTabId.value ?: return) { it.copy(url = url) }
-        checkBookmarkStatus(url)
+    fun onTabPageStarted(tabId: String, url: String) {
+        tabManager.updateTab(tabId) { it.copy(url = url) }
+        if (tabId == activeTabId.value) {
+            _currentUrl.value = url
+            _isSecure.value = UrlUtils.isHttps(url)
+            checkBookmarkStatus(url)
+        }
     }
 
-    fun onPageFinished(url: String, title: String) {
-        _currentUrl.value = url
-        _currentTitle.value = title
-        _isSecure.value = UrlUtils.isHttps(url)
-        tabManager.updateTab(activeTabId.value ?: return) { it.copy(url = url, title = title) }
-
-        val isIncognito = activeTab?.isIncognito == true
+    fun onTabPageFinished(tabId: String, url: String, title: String) {
+        tabManager.updateTab(tabId) { it.copy(url = url, title = title) }
+        if (tabId == activeTabId.value) {
+            _currentUrl.value = url
+            _currentTitle.value = title
+            _isSecure.value = UrlUtils.isHttps(url)
+            checkBookmarkStatus(url)
+        }
+        val isIncognito = tabManager.tabs.value.find { it.id == tabId }?.isIncognito == true
         if (!isIncognito && url.startsWith("http")) {
             viewModelScope.launch {
                 addHistoryUseCase(url, title, activeProfileId)
             }
         }
-        checkBookmarkStatus(url)
     }
 
     fun onProgressChanged(progress: Int) {
@@ -127,6 +137,10 @@ class BrowserViewModel @Inject constructor(
 
     fun showTabs() {
         viewModelScope.launch { _showTabsEvent.emit(Unit) }
+    }
+
+    fun setDesktopMode(enabled: Boolean) {
+        viewModelScope.launch { settingsDataStore.setDesktopMode(enabled) }
     }
 
     fun toggleBookmark() {

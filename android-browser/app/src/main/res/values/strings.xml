@@ -91,7 +91,21 @@
     <string name="menu_share">Share</string>
     <string name="menu_desktop_mode">Desktop Mode</string>
 
+    <!-- Tabs UI -->
+    <string name="close_all">Close all</string>
+    <string name="tab_count_label">tabs</string>
+    <string name="incognito_tabs_label">incognito tabs</string>
+
+    <!-- Settings additions -->
+    <string name="desktop_mode_summary">Request desktop versions of websites</string>
+    <string name="dark_mode">Dark Mode</string>
+    <string name="dark_mode_summary">Use dark theme throughout the browser</string>
+    <string name="restart_to_apply">Restart the app to apply this change</string>
+
     <!-- About -->
-    <string name="app_version">Version 1.0.0</string>
+    <string name="app_version">Version</string>
+    <string name="app_version_value">1.0.0 (1)</string>
+    <string name="open_source">Open Source</string>
+    <string name="open_source_summary">Velo Browser — Fast, lightweight, and private</string>
     <string name="about_description">Velo Browser — Fast, lightweight, and private.</string>
 </resources>

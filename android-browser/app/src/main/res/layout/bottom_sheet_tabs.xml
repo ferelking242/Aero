@@ -1,53 +1,108 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="vertical"
-    android:paddingBottom="16dp">
+    android:orientation="vertical">
 
+    <!-- Handle bar -->
+    <View
+        android:layout_width="40dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="4dp"
+        android:background="@drawable/bg_bottom_sheet_handle" />
+
+    <!-- Header row: tab count + close all -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="56dp"
+        android:layout_height="48dp"
         android:orientation="horizontal"
         android:gravity="center_vertical"
         android:paddingStart="16dp"
-        android:paddingEnd="8dp">
+        android:paddingEnd="12dp">
 
         <TextView
+            android:id="@+id/tvTabCountHeader"
             android:layout_width="0dp"
             android:layout_weight="1"
             android:layout_height="wrap_content"
             android:text="@string/tabs"
-            android:textSize="18sp"
+            android:textSize="17sp"
             android:textStyle="bold"
             android:textColor="@color/color_text_primary" />
 
-        <Button
-            android:id="@+id/btnNewIncognito"
+        <TextView
+            android:id="@+id/btnCloseAllTabs"
             android:layout_width="wrap_content"
-            android:layout_height="36dp"
-            style="@style/Widget.Material3.Button.OutlinedButton"
-            android:text="@string/incognito"
-            android:textSize="12sp"
-            android:layout_marginEnd="8dp" />
-
-        <Button
-            android:id="@+id/btnNewTab"
-            android:layout_width="wrap_content"
-            android:layout_height="36dp"
-            android:text="@string/new_tab"
-            android:textSize="12sp" />
+            android:layout_height="wrap_content"
+            android:text="@string/close_all"
+            android:textSize="13sp"
+            android:textColor="@color/color_accent"
+            android:padding="8dp"
+            android:background="?attr/selectableItemBackgroundBorderless" />
 
     </LinearLayout>
 
+    <!-- Tab type selector: Tabs | Incognito -->
+    <com.google.android.material.tabs.TabLayout
+        android:id="@+id/tabTypeSelector"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="4dp"
+        app:tabMode="fixed"
+        app:tabGravity="fill"
+        app:tabBackground="@android:color/transparent"
+        app:tabSelectedTextColor="@color/color_accent"
+        app:tabTextColor="@color/color_text_secondary"
+        app:tabIndicatorColor="@color/color_accent"
+        app:tabIndicatorHeight="2dp"
+        style="@style/Widget.Material3.TabLayout" />
+
+    <!-- Tabs grid -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recyclerTabs"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:maxHeight="400dp"
         android:paddingStart="8dp"
         android:paddingEnd="8dp"
+        android:paddingBottom="8dp"
         android:clipToPadding="false" />
+
+    <!-- Bottom action bar -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:background="@color/color_toolbar"
+        android:elevation="2dp">
+
+        <Button
+            android:id="@+id/btnNewIncognito"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="40dp"
+            android:layout_marginStart="12dp"
+            android:layout_marginEnd="6dp"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:text="@string/incognito"
+            android:textSize="13sp" />
+
+        <Button
+            android:id="@+id/btnNewTab"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="40dp"
+            android:layout_marginStart="6dp"
+            android:layout_marginEnd="12dp"
+            android:text="@string/new_tab"
+            android:textSize="13sp" />
+
+    </LinearLayout>
 
 </LinearLayout>
