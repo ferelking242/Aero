@@ -18,6 +18,7 @@ import com.velobrowser.core.adblocker.AdBlocker
 import com.velobrowser.core.browser.*
 import com.velobrowser.core.download.VeloDownloadManager
 import com.velobrowser.databinding.ActivityBrowserBinding
+import com.velobrowser.domain.model.BrowserTab
 import com.velobrowser.ui.downloads.DownloadsActivity
 import com.velobrowser.ui.profiles.ProfileManagerActivity
 import com.velobrowser.ui.settings.SettingsActivity
@@ -35,9 +36,12 @@ class BrowserActivity : AppCompatActivity() {
     @Inject lateinit var adBlocker: AdBlocker
     @Inject lateinit var downloadManager: VeloDownloadManager
 
-    private var webView: WebView? = null
+    private val webViews = LinkedHashMap<String, WebView>()
     private var fullscreenView: View? = null
     private var fullscreenCallback: WebChromeClient.CustomViewCallback? = null
+
+    private val activeWebView: WebView?
+        get() = webViews[viewModel.activeTabId.value]
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -47,7 +51,6 @@ class BrowserActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         requestPermissionsIfNeeded()
-        setupWebView()
         setupUrlBar()
         setupNavigationControls()
         setupBottomBar()
@@ -67,51 +70,105 @@ class BrowserActivity : AppCompatActivity() {
         }
     }
 
-    private fun setupWebView() {
+    private fun createWebViewForTab(tab: BrowserTab): WebView {
+        val tabId = tab.id
         val settings = viewModel.settings.value
-        webView = WebViewFactory.create(this).also { wv ->
+
+        return WebViewFactory.create(this).also { wv ->
             WebViewFactory.applySettings(wv, settings)
+
+            if (tab.isIncognito) {
+                WebViewFactory.setIncognitoMode(wv)
+            } else {
+                WebViewFactory.setNormalMode(wv)
+            }
 
             wv.webViewClient = VeloWebViewClient(
                 adBlocker = adBlocker,
                 isAdBlockerEnabled = { viewModel.settings.value.adBlockerEnabled },
-                onPageStarted = { url -> viewModel.onPageStarted(url) },
-                onPageFinished = { url, title -> viewModel.onPageFinished(url, title) },
+                onPageStarted = { url ->
+                    viewModel.onTabPageStarted(tabId, url)
+                    if (viewModel.activeTabId.value == tabId) {
+                        runOnUiThread { updateToolbarForUrl(url) }
+                    }
+                },
+                onPageFinished = { url, title ->
+                    viewModel.onTabPageFinished(tabId, url, title)
+                    if (viewModel.activeTabId.value == tabId) {
+                        runOnUiThread { updateToolbarForUrl(url) }
+                    }
+                },
                 onError = { error ->
-                    runOnUiThread { toast(getString(R.string.error_loading_page, error)) }
+                    if (viewModel.activeTabId.value == tabId) {
+                        runOnUiThread { toast(getString(R.string.error_loading_page, error)) }
+                    }
                 },
                 onSslError = { _ ->
-                    runOnUiThread { toast(getString(R.string.error_ssl)) }
+                    if (viewModel.activeTabId.value == tabId) {
+                        runOnUiThread { toast(getString(R.string.error_ssl)) }
+                    }
                 }
             )
 
             wv.webChromeClient = VeloWebChromeClient(
                 onProgressChanged = { progress ->
-                    runOnUiThread { viewModel.onProgressChanged(progress) }
+                    if (viewModel.activeTabId.value == tabId) {
+                        runOnUiThread { viewModel.onProgressChanged(progress) }
+                    }
                 },
                 onTitleChanged = { _ -> },
                 onFaviconReceived = { _ -> },
                 onShowFileChooser = { _ -> false },
                 onShowCustomView = { view, callback ->
-                    showFullscreen(view, callback)
+                    if (viewModel.activeTabId.value == tabId) showFullscreen(view, callback)
                 },
-                onHideCustomView = { hideFullscreen() }
+                onHideCustomView = {
+                    if (viewModel.activeTabId.value == tabId) hideFullscreen()
+                }
             )
 
             wv.setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
-                if (PermissionUtils.hasStoragePermission(this)) {
-                    downloadManager.startDownload(this, url, userAgent, contentDisposition, mimeType)
-                    toast(getString(R.string.download_started))
-                } else {
-                    requestPermissions(PermissionUtils.getRequiredPermissions(), 1002)
+                if (viewModel.activeTabId.value == tabId) {
+                    if (PermissionUtils.hasStoragePermission(this)) {
+                        downloadManager.startDownload(this, url, userAgent, contentDisposition, mimeType)
+                        toast(getString(R.string.download_started))
+                    } else {
+                        requestPermissions(PermissionUtils.getRequiredPermissions(), 1002)
+                    }
                 }
             }
 
+            wv.visibility = View.GONE
             binding.webViewContainer.addView(wv, android.widget.FrameLayout.LayoutParams(
                 android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
                 android.widget.FrameLayout.LayoutParams.MATCH_PARENT
             ))
         }
+    }
+
+    private fun switchToWebView(tabId: String) {
+        webViews.values.forEach { it.visibility = View.GONE }
+        webViews[tabId]?.visibility = View.VISIBLE
+    }
+
+    private fun destroyWebViewForTab(tabId: String) {
+        webViews.remove(tabId)?.let { wv ->
+            binding.webViewContainer.removeView(wv)
+            wv.stopLoading()
+            wv.clearHistory()
+            wv.destroy()
+        }
+    }
+
+    private fun updateToolbarForUrl(url: String) {
+        if (!binding.urlEditText.hasFocus()) {
+            binding.urlEditText.setText(url)
+        }
+        binding.btnSecureIndicator.setImageResource(
+            if (UrlUtils.isHttps(url)) R.drawable.ic_lock else R.drawable.ic_lock_open
+        )
+        binding.btnBack.isEnabled = activeWebView?.canGoBack() == true
+        binding.btnForward.isEnabled = activeWebView?.canGoForward() == true
     }
 
     private fun setupUrlBar() {
@@ -137,7 +194,6 @@ class BrowserActivity : AppCompatActivity() {
         }
 
         binding.btnSecureIndicator.setOnClickListener {
-            val url = viewModel.currentUrl.value
             val isSecure = viewModel.isSecure.value
             val msg = if (isSecure) getString(R.string.connection_secure)
                       else getString(R.string.connection_not_secure)
@@ -147,27 +203,27 @@ class BrowserActivity : AppCompatActivity() {
 
     private fun setupNavigationControls() {
         binding.btnBack.setOnClickListener {
-            if (webView?.canGoBack() == true) webView?.goBack()
+            if (activeWebView?.canGoBack() == true) activeWebView?.goBack()
         }
         binding.btnBack.setOnLongClickListener {
-            webView?.copyBackForwardList()?.let { history ->
+            activeWebView?.copyBackForwardList()?.let { history ->
                 toast("${history.size} pages in history")
             }
             true
         }
         binding.btnForward.setOnClickListener {
-            if (webView?.canGoForward() == true) webView?.goForward()
+            if (activeWebView?.canGoForward() == true) activeWebView?.goForward()
         }
         binding.btnRefresh.setOnClickListener {
             if (viewModel.pageProgress.value < 100) {
-                webView?.stopLoading()
+                activeWebView?.stopLoading()
             } else {
-                webView?.reload()
+                activeWebView?.reload()
             }
         }
         binding.btnRefresh.setOnLongClickListener {
-            webView?.clearCache(true)
-            webView?.reload()
+            activeWebView?.clearCache(true)
+            activeWebView?.reload()
             toast(getString(R.string.cache_cleared))
             true
         }
@@ -184,11 +240,41 @@ class BrowserActivity : AppCompatActivity() {
 
     private fun observeViewModel() {
         collectFlow(viewModel.loadUrlEvent) { url ->
-            webView?.loadUrl(url)
+            val tabId = viewModel.activeTabId.value
+            if (tabId != null && !webViews.containsKey(tabId)) {
+                val tab = viewModel.tabs.value.find { it.id == tabId }
+                if (tab != null) {
+                    val wv = createWebViewForTab(tab)
+                    webViews[tabId] = wv
+                    switchToWebView(tabId)
+                }
+            }
+            activeWebView?.loadUrl(url)
         }
 
         collectFlow(viewModel.showTabsEvent) {
             showTabsSheet()
+        }
+
+        collectFlow(viewModel.activeTabId) { tabId ->
+            if (tabId != null) {
+                val tab = viewModel.tabs.value.find { it.id == tabId }
+                if (tab != null) {
+                    if (!webViews.containsKey(tabId)) {
+                        val wv = createWebViewForTab(tab)
+                        webViews[tabId] = wv
+                    }
+                    switchToWebView(tabId)
+                    val currentUrl = tab.url
+                    updateToolbarForUrl(currentUrl)
+                    if (!binding.urlEditText.hasFocus()) {
+                        binding.urlEditText.setText(currentUrl)
+                    }
+                    binding.btnSecureIndicator.setImageResource(
+                        if (UrlUtils.isHttps(currentUrl)) R.drawable.ic_lock else R.drawable.ic_lock_open
+                    )
+                }
+            }
         }
 
         collectFlow(viewModel.pageProgress) { progress ->
@@ -206,8 +292,8 @@ class BrowserActivity : AppCompatActivity() {
             binding.btnSecureIndicator.setImageResource(
                 if (UrlUtils.isHttps(url)) R.drawable.ic_lock else R.drawable.ic_lock_open
             )
-            binding.btnBack.isEnabled = webView?.canGoBack() == true
-            binding.btnForward.isEnabled = webView?.canGoForward() == true
+            binding.btnBack.isEnabled = activeWebView?.canGoBack() == true
+            binding.btnForward.isEnabled = activeWebView?.canGoForward() == true
         }
 
         collectFlow(viewModel.isBookmarked) { bookmarked ->
@@ -218,10 +304,13 @@ class BrowserActivity : AppCompatActivity() {
 
         collectFlow(viewModel.tabs) { tabs ->
             binding.tvTabCount.text = tabs.size.toString()
+            val currentTabIds = tabs.map { it.id }.toSet()
+            val removedIds = webViews.keys.filter { it !in currentTabIds }
+            removedIds.forEach { id -> destroyWebViewForTab(id) }
         }
 
         collectFlow(viewModel.settings) { settings ->
-            webView?.let { WebViewFactory.applySettings(it, settings) }
+            webViews.values.forEach { wv -> WebViewFactory.applySettings(wv, settings) }
         }
     }
 
@@ -249,14 +338,17 @@ class BrowserActivity : AppCompatActivity() {
                     true
                 }
                 R.id.menu_share -> {
-                    val intent = Intent(Intent.ACTION_SEND).apply {
+                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
                         type = "text/plain"
                         putExtra(Intent.EXTRA_TEXT, viewModel.currentUrl.value)
                     }
-                    startActivity(Intent.createChooser(intent, getString(R.string.share)))
+                    startActivity(Intent.createChooser(shareIntent, getString(R.string.share)))
                     true
                 }
                 R.id.menu_desktop_mode -> {
+                    val newValue = !viewModel.settings.value.desktopMode
+                    viewModel.setDesktopMode(newValue)
+                    activeWebView?.reload()
                     true
                 }
                 else -> false
@@ -306,30 +398,30 @@ class BrowserActivity : AppCompatActivity() {
     override fun onBackPressed() {
         when {
             fullscreenView != null -> hideFullscreen()
-            webView?.canGoBack() == true -> webView?.goBack()
+            activeWebView?.canGoBack() == true -> activeWebView?.goBack()
             else -> super.onBackPressed()
         }
     }
 
     override fun onPause() {
         super.onPause()
-        webView?.onPause()
+        webViews.values.forEach { it.onPause() }
         CookieManager.getInstance().flush()
     }
 
     override fun onResume() {
         super.onResume()
-        webView?.onResume()
+        webViews.values.forEach { it.onResume() }
     }
 
     override fun onDestroy() {
         binding.webViewContainer.removeAllViews()
-        webView?.apply {
-            stopLoading()
-            clearHistory()
-            destroy()
+        webViews.values.forEach { wv ->
+            wv.stopLoading()
+            wv.clearHistory()
+            wv.destroy()
         }
-        webView = null
+        webViews.clear()
         super.onDestroy()
     }
 }
