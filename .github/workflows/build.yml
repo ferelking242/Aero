@@ -35,12 +35,12 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build Debug APK
-        run: ./gradlew assembleDebug --stacktrace --no-daemon
+        run: gradle assembleDebug --stacktrace --no-daemon
         env:
           GRADLE_OPTS: "-Dorg.gradle.workers.max=2"
 
       - name: Build Release APK (unsigned)
-        run: ./gradlew assembleRelease --stacktrace --no-daemon
+        run: gradle assembleRelease --stacktrace --no-daemon
         env:
           GRADLE_OPTS: "-Dorg.gradle.workers.max=2"
 
@@ -92,7 +92,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Run Lint
-        run: ./gradlew lint --no-daemon
+        run: gradle lint --no-daemon
 
       - name: Upload Lint Report
         uses: actions/upload-artifact@v4
