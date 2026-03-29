@@ -1,6 +1,7 @@
 package com.velobrowser.ui.tabs
 
 import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.DiffUtil
@@ -19,21 +20,35 @@ class TabsAdapter(
     inner class ViewHolder(private val binding: ItemTabBinding) :
         RecyclerView.ViewHolder(binding.root) {
         fun bind(tab: BrowserTab) {
-            binding.tvTabTitle.text = tab.title.ifBlank { binding.root.context.getString(R.string.new_tab) }
-            binding.tvTabUrl.text = tab.url.ifBlank { binding.root.context.getString(R.string.about_blank) }
+            val title = tab.title.ifBlank { binding.root.context.getString(R.string.new_tab) }
+            binding.tvTabTitle.text = title
+            binding.tvTabUrl.text = tab.url
 
             val isActive = tab.id == activeTabId()
-            binding.root.strokeColor = if (isActive) {
-                ContextCompat.getColor(binding.root.context, com.google.android.material.R.color.design_default_color_primary)
-            } else {
-                ContextCompat.getColor(binding.root.context, android.R.color.transparent)
+
+            val strokeColor = when {
+                isActive && tab.isIncognito ->
+                    ContextCompat.getColor(binding.root.context, R.color.color_incognito)
+                isActive ->
+                    ContextCompat.getColor(binding.root.context, com.google.android.material.R.color.design_default_color_primary)
+                else ->
+                    ContextCompat.getColor(binding.root.context, android.R.color.transparent)
             }
-            binding.root.strokeWidth = if (isActive) 4 else 0
+            binding.root.strokeColor = strokeColor
+            binding.root.strokeWidth = if (isActive) 5 else 0
 
             if (tab.isIncognito) {
-                binding.ivIncognito.visibility = android.view.View.VISIBLE
+                binding.ivIncognito.visibility = View.VISIBLE
+                binding.ivIncognitoCenter.visibility = View.VISIBLE
+                binding.tabPreviewArea.setBackgroundColor(
+                    ContextCompat.getColor(binding.root.context, R.color.color_incognito_preview_bg)
+                )
             } else {
-                binding.ivIncognito.visibility = android.view.View.GONE
+                binding.ivIncognito.visibility = View.GONE
+                binding.ivIncognitoCenter.visibility = View.GONE
+                binding.tabPreviewArea.setBackgroundColor(
+                    ContextCompat.getColor(binding.root.context, R.color.color_tab_preview_bg)
+                )
             }
 
             binding.root.setOnClickListener { onTabClicked(tab) }
