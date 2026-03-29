@@ -41,7 +41,7 @@ jobs:
 
       - name: Build Signed Release APK
         run: |
-          gradle assembleRelease \
+          ./gradlew assembleRelease \
             -Pandroid.injected.signing.store.file=velo_release.jks \
             -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD }} \
             -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
@@ -70,14 +70,14 @@ jobs:
             ## Velo Browser ${{ github.ref_name }} — Production Release
 
             ### Features
+            - Per-tab WebView isolation — instant switching, no reload
             - Multi-profile browsing with isolated cookie sessions
             - Built-in ad blocker (EasyList-based)
-            - Multi-tab management with incognito support
-            - Full settings system (DataStore)
+            - Chrome-style tab switcher with incognito/normal grouping
+            - Full settings: JavaScript, Desktop Mode, Dark Mode, Ad Blocker, Safe Browsing, 6 search engines, Homepage, Language
             - English & French language support
-            - Download manager
-            - Ultra Fast Mode
-            - Safe browsing & HTTPS enforcement
+            - Download manager with notifications
+            - HTTPS enforcement & Safe Browsing
           token: ${{ secrets.GITHUB_TOKEN }}
           draft: false
           prerelease: false
