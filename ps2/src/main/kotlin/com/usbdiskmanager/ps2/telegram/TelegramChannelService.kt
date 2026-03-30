@@ -200,7 +200,7 @@ class TelegramChannelService @Inject constructor(
 
             val rawText = textPattern.find(body)?.groupValues?.get(1)
                 ?.replace(Regex("<[^>]+>"), " ")
-                ?.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+                ?.replace("&amp;", "&")?.replace("&lt;", "<")?.replace("&gt;", ">")
                 ?.replace("&nbsp;", " ")?.trim() ?: ""
             val photoUrl = photoPattern.find(body)?.groupValues?.get(1) ?: ""
             val docName  = docNamePattern.find(body)?.groupValues?.get(1)?.trim() ?: ""

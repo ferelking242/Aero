@@ -10,7 +10,7 @@ import kotlin.reflect.KClass
 // ─── TL constructor IDs ──────────────────────────────────────────────────────
 object TLConstructors {
     const val VECTOR              = 0x1cb5c415
-    const val BOOL_TRUE           = 0x997275b5
+    const val BOOL_TRUE           = 0x997275b5.toInt()
     const val BOOL_FALSE          = 0xbc799737.toInt()
     const val BAD_SERVER_SALT     = 0xedab447b.toInt()
     const val RPC_RESULT          = 0xf35c6d01.toInt()
@@ -64,7 +64,7 @@ object TLConstructors {
     const val USER                = 0x8f97c628.toInt()
     const val USER_EMPTY          = 0xd3bc4b7a.toInt()
     const val CHAT                = 0x3bda1bde.toInt()
-    const val CHAT_EMPTY          = 0x9ba2d800
+    const val CHAT_EMPTY          = 0x9ba2d800.toInt()
 }
 
 // ─── Base TLObject ───────────────────────────────────────────────────────────
