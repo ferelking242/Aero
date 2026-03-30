@@ -47,20 +47,23 @@ class TDLibClient @Inject constructor(
     val isReady: Boolean
         get() = _authState.value is TdApi.AuthorizationStateReady
 
-    // ── Initialisation ────────────────────────────────────────────────────────
+    private var pendingApiId: Int = 0
+    private var pendingApiHash: String = ""
 
     fun initialize(apiId: Int, apiHash: String) {
         if (client != null) return
+        pendingApiId = apiId
+        pendingApiHash = apiHash
         Client.setLogVerbosityLevel(1)
         client = Client.create(
-            { update -> handleUpdate(update, apiId, apiHash) },
+            { update -> handleUpdate(update) },
             null,
             null
         )
         Timber.d("TDLib client created")
     }
 
-    private fun handleUpdate(update: TdApi.Object, apiId: Int, apiHash: String) {
+    private fun handleUpdate(update: TdApi.Object) {
         when (update) {
             is TdApi.UpdateAuthorizationState -> {
                 val state = update.authorizationState
@@ -68,9 +71,7 @@ class TDLibClient @Inject constructor(
                 Timber.d("Auth state: ${state::class.simpleName}")
                 when (state) {
                     is TdApi.AuthorizationStateWaitTdlibParameters ->
-                        sendTdlibParameters(apiId, apiHash)
-                    is TdApi.AuthorizationStateWaitEncryptionKey ->
-                        client?.send(TdApi.CheckDatabaseEncryptionKey(), emptyHandler)
+                        sendTdlibParameters()
                     else -> Unit
                 }
             }
@@ -79,30 +80,29 @@ class TDLibClient @Inject constructor(
         }
     }
 
-    private val emptyHandler = Client.ResultHandler { /* no-op */ }
+    private val emptyHandler = Client.ResultHandler { }
 
-    private fun sendTdlibParameters(apiId: Int, apiHash: String) {
+    private fun sendTdlibParameters() {
         val dbDir = File(context.filesDir, "tdlib_db").also { it.mkdirs() }
         val filesDir = File(context.filesDir, "tdlib_files").also { it.mkdirs() }
-        val params = TdApi.TdlibParameters().apply {
-            databaseDirectory = dbDir.absolutePath
-            this.filesDirectory = filesDir.absolutePath
-            useFileDatabase = true
-            useChatInfoDatabase = true
-            useMessageDatabase = true
-            useSecretChats = false
-            this.apiId = apiId
-            this.apiHash = apiHash
-            systemLanguageCode = "fr"
-            deviceModel = "Android"
-            systemVersion = "Android"
-            applicationVersion = "1.0"
-            enableStorageOptimizer = true
-        }
-        client?.send(TdApi.SetTdlibParameters(params), emptyHandler)
+        val params = TdApi.SetTdlibParameters(
+            false,
+            dbDir.absolutePath,
+            filesDir.absolutePath,
+            ByteArray(0),
+            true,
+            true,
+            true,
+            false,
+            pendingApiId,
+            pendingApiHash,
+            "fr",
+            "Android",
+            "Android",
+            "1.0"
+        )
+        client?.send(params, emptyHandler)
     }
-
-    // ── Suspend helper ────────────────────────────────────────────────────────
 
     @Suppress("UNCHECKED_CAST")
     suspend fun <T : TdApi.Object> send(function: TdApi.Function<T>): T =
@@ -116,8 +116,6 @@ class TDLibClient @Inject constructor(
                 }
             } ?: cont.resumeWithException(IllegalStateException("TDLib not initialized"))
         }
-
-    // ── Auth API ──────────────────────────────────────────────────────────────
 
     suspend fun setPhoneNumber(phone: String) =
         send(TdApi.SetAuthenticationPhoneNumber(phone, null))
@@ -134,8 +132,6 @@ class TDLibClient @Inject constructor(
         authState.first { it is TdApi.AuthorizationStateReady }
     }
 
-    // ── Channel / message API ─────────────────────────────────────────────────
-
     suspend fun searchPublicChat(username: String): TdApi.Chat =
         send(TdApi.SearchPublicChat(username))
 
@@ -147,8 +143,6 @@ class TDLibClient @Inject constructor(
         fromMessageId: Long,
         limit: Int
     ): TdApi.Messages = send(TdApi.GetChatHistory(chatId, fromMessageId, 0, limit, false))
-
-    // ── File / download API ───────────────────────────────────────────────────
 
     suspend fun startDownload(fileId: Int, priority: Int = 32): TdApi.File =
         send(TdApi.DownloadFile(fileId, priority, 0, 0, false))

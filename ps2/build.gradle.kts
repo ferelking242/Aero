@@ -54,6 +54,6 @@ dependencies {
     implementation(libs.datastore.preferences)
     implementation(libs.timber)
     implementation(libs.coil.compose)
-    implementation("io.github.tdlibx:tdlib:v1.8.44")
+    implementation("com.github.tdlibx:td:1.8.56")
     debugImplementation(libs.compose.ui.tooling)
 }

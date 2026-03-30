@@ -128,8 +128,7 @@ class TelegramChannelService @Inject constructor(
         return when (tdlib.authState.value) {
             is TdApi.AuthorizationStateReady -> TelegramSetupState.Ready
             is TdApi.AuthorizationStateWaitPhoneNumber,
-            is TdApi.AuthorizationStateWaitTdlibParameters,
-            is TdApi.AuthorizationStateWaitEncryptionKey ->
+            is TdApi.AuthorizationStateWaitTdlibParameters ->
                 TelegramSetupState.WaitingPhoneNumber
             is TdApi.AuthorizationStateWaitCode ->
                 TelegramSetupState.WaitingCode(getSavedPhone())
