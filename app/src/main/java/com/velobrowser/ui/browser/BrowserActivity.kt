@@ -13,6 +13,7 @@ import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import androidx.core.view.isVisible
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.velobrowser.R
 import com.velobrowser.core.adblocker.AdBlocker
 import com.velobrowser.core.browser.*
@@ -45,15 +46,16 @@ class BrowserActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        WindowCompat.setDecorFitsSystemWindows(window, true)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
 
         binding = ActivityBrowserBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
         requestPermissionsIfNeeded()
         setupUrlBar()
+        setupHomeSearchBar()
         setupNavigationControls()
-        setupBottomBar()
+        setupViaMenu()
         observeViewModel()
 
         handleIntent(intent)
@@ -69,6 +71,47 @@ class BrowserActivity : AppCompatActivity() {
             requestPermissions(permissions, 1001)
         }
     }
+
+    // ─── Homepage show / hide ────────────────────────────────────────────────
+
+    private fun showHomepage() {
+        binding.homepageOverlay.visibility = View.VISIBLE
+        binding.homeTopRight.visibility = View.VISIBLE
+        binding.topToolbar.visibility = View.GONE
+        binding.progressBar.visibility = View.GONE
+    }
+
+    private fun hideHomepage() {
+        binding.homepageOverlay.visibility = View.GONE
+        binding.homeTopRight.visibility = View.GONE
+        binding.topToolbar.visibility = View.VISIBLE
+    }
+
+    private fun isOnHomepage(url: String?): Boolean {
+        return url.isNullOrBlank() || url == "about:blank"
+    }
+
+    // ─── Home search bar ────────────────────────────────────────────────────
+
+    private fun setupHomeSearchBar() {
+        binding.homeSearchEditText.apply {
+            setOnEditorActionListener { v, actionId, event ->
+                if (actionId == EditorInfo.IME_ACTION_GO ||
+                    (event?.keyCode == KeyEvent.KEYCODE_ENTER && event.action == KeyEvent.ACTION_DOWN)
+                ) {
+                    viewModel.navigateTo(v.text.toString())
+                    hideKeyboard()
+                    clearFocus()
+                    true
+                } else false
+            }
+        }
+
+        binding.homeTabsBtn.setOnClickListener { viewModel.showTabs() }
+        binding.homeMenuBtn.setOnClickListener { showViaMenuSheet() }
+    }
+
+    // ─── Create / switch / destroy WebViews ─────────────────────────────────
 
     private fun createWebViewForTab(tab: BrowserTab): WebView {
         val tabId = tab.id
@@ -89,7 +132,10 @@ class BrowserActivity : AppCompatActivity() {
                 onPageStarted = { url ->
                     viewModel.onTabPageStarted(tabId, url)
                     if (viewModel.activeTabId.value == tabId) {
-                        runOnUiThread { updateToolbarForUrl(url) }
+                        runOnUiThread {
+                            updateToolbarForUrl(url)
+                            if (!isOnHomepage(url)) hideHomepage()
+                        }
                     }
                 },
                 onPageFinished = { url, title ->
@@ -164,12 +210,15 @@ class BrowserActivity : AppCompatActivity() {
         if (!binding.urlEditText.hasFocus()) {
             binding.urlEditText.setText(url)
         }
+        val isSecure = UrlUtils.isHttps(url)
         binding.btnSecureIndicator.setImageResource(
-            if (UrlUtils.isHttps(url)) R.drawable.ic_lock else R.drawable.ic_lock_open
+            if (isSecure) R.drawable.ic_lock else R.drawable.ic_globe
         )
         binding.btnBack.isEnabled = activeWebView?.canGoBack() == true
         binding.btnForward.isEnabled = activeWebView?.canGoForward() == true
     }
+
+    // ─── URL bar ────────────────────────────────────────────────────────────
 
     private fun setupUrlBar() {
         binding.urlEditText.apply {
@@ -201,15 +250,11 @@ class BrowserActivity : AppCompatActivity() {
         }
     }
 
+    // ─── Navigation controls ─────────────────────────────────────────────────
+
     private fun setupNavigationControls() {
         binding.btnBack.setOnClickListener {
             if (activeWebView?.canGoBack() == true) activeWebView?.goBack()
-        }
-        binding.btnBack.setOnLongClickListener {
-            activeWebView?.copyBackForwardList()?.let { history ->
-                toast("${history.size} pages in history")
-            }
-            true
         }
         binding.btnForward.setOnClickListener {
             if (activeWebView?.canGoForward() == true) activeWebView?.goForward()
@@ -227,16 +272,128 @@ class BrowserActivity : AppCompatActivity() {
             toast(getString(R.string.cache_cleared))
             true
         }
+        binding.btnTabs.setOnClickListener { viewModel.showTabs() }
+        binding.btnMenu.setOnClickListener { showViaMenuSheet() }
     }
 
-    private fun setupBottomBar() {
-        binding.btnTabs.setOnClickListener { viewModel.showTabs() }
-        binding.btnHome.setOnClickListener {
-            viewModel.navigateTo(viewModel.settings.value.homepage)
-        }
-        binding.btnBookmark.setOnClickListener { viewModel.toggleBookmark() }
-        binding.btnMenu.setOnClickListener { showMenuOptions() }
+    // ─── Via-style menu bottom sheet ─────────────────────────────────────────
+
+    private fun setupViaMenu() {
+        // Nothing to pre-setup — sheet is created on demand
     }
+
+    private fun showViaMenuSheet() {
+        val dialog = BottomSheetDialog(this, R.style.ViaMenuBottomSheetStyle)
+        val sheetView = layoutInflater.inflate(R.layout.bottom_sheet_via_menu, null)
+        dialog.setContentView(sheetView)
+
+        val currentUrl = viewModel.currentUrl.value
+        val isBookmarked = viewModel.isBookmarked.value
+        val isDesktop = viewModel.settings.value.desktopMode
+
+        // Night mode icon tint — if dark mode active, tint blue
+        sheetView.findViewById<android.widget.ImageView>(R.id.iconNightMode)?.let { icon ->
+            icon.setColorFilter(
+                android.graphics.Color.parseColor(if (viewModel.settings.value.darkMode) "#1A73E8" else "#FFFFFF")
+            )
+        }
+
+        // Desktop mode icon tint
+        sheetView.findViewById<android.widget.ImageView>(R.id.iconDesktopMode)?.let { icon ->
+            icon.setColorFilter(
+                android.graphics.Color.parseColor(if (isDesktop) "#1A73E8" else "#FFFFFF")
+            )
+        }
+
+        // Bookmark icon
+        sheetView.findViewById<android.widget.ImageView>(R.id.iconAddBookmark)?.let { icon ->
+            icon.setImageResource(
+                if (isBookmarked) R.drawable.ic_bookmark_filled else R.drawable.ic_bookmark
+            )
+        }
+
+        // Row 1
+        sheetView.findViewById<android.view.View>(R.id.menuNightMode)?.setOnClickListener {
+            val newVal = !viewModel.settings.value.darkMode
+            viewModel.setDarkMode(newVal)
+            toast(if (newVal) "Dark mode on — restart to apply" else "Dark mode off — restart to apply")
+            dialog.dismiss()
+        }
+
+        sheetView.findViewById<android.view.View>(R.id.menuBookmarks)?.setOnClickListener {
+            dialog.dismiss()
+            com.velobrowser.ui.browser.BookmarksBottomSheet.newInstance()
+                .show(supportFragmentManager, com.velobrowser.ui.browser.BookmarksBottomSheet.TAG)
+        }
+
+        sheetView.findViewById<android.view.View>(R.id.menuHistory)?.setOnClickListener {
+            dialog.dismiss()
+            com.velobrowser.ui.browser.HistoryBottomSheet.newInstance()
+                .show(supportFragmentManager, com.velobrowser.ui.browser.HistoryBottomSheet.TAG)
+        }
+
+        sheetView.findViewById<android.view.View>(R.id.menuDownloads)?.setOnClickListener {
+            dialog.dismiss()
+            startActivity(Intent(this, DownloadsActivity::class.java))
+        }
+
+        sheetView.findViewById<android.view.View>(R.id.menuIncognito)?.setOnClickListener {
+            dialog.dismiss()
+            viewModel.openNewTab(incognito = true)
+        }
+
+        // Row 2
+        sheetView.findViewById<android.view.View>(R.id.menuShare)?.setOnClickListener {
+            dialog.dismiss()
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, currentUrl)
+            }
+            startActivity(Intent.createChooser(shareIntent, getString(R.string.share)))
+        }
+
+        sheetView.findViewById<android.view.View>(R.id.menuAddBookmark)?.setOnClickListener {
+            dialog.dismiss()
+            viewModel.toggleBookmark()
+            toast(if (!isBookmarked) "Bookmark added" else "Bookmark removed")
+        }
+
+        sheetView.findViewById<android.view.View>(R.id.menuDesktopMode)?.setOnClickListener {
+            dialog.dismiss()
+            val newVal = !isDesktop
+            viewModel.setDesktopMode(newVal)
+            activeWebView?.let { viewModel.settings.value.also { s ->
+                WebViewFactory.applySettings(it, s.copy(desktopMode = newVal))
+                it.reload()
+            }}
+            toast(if (newVal) "Desktop mode on" else "Desktop mode off")
+        }
+
+        sheetView.findViewById<android.view.View>(R.id.menuProfiles)?.setOnClickListener {
+            dialog.dismiss()
+            startActivity(Intent(this, ProfileManagerActivity::class.java))
+        }
+
+        sheetView.findViewById<android.view.View>(R.id.menuSettings)?.setOnClickListener {
+            dialog.dismiss()
+            startActivity(Intent(this, SettingsActivity::class.java))
+        }
+
+        // Bottom row
+        sheetView.findViewById<android.view.View>(R.id.menuNewTab)?.setOnClickListener {
+            dialog.dismiss()
+            viewModel.openNewTab()
+        }
+
+        sheetView.findViewById<android.view.View>(R.id.menuNewIncognito)?.setOnClickListener {
+            dialog.dismiss()
+            viewModel.openNewTab(incognito = true)
+        }
+
+        dialog.show()
+    }
+
+    // ─── ViewModel observations ───────────────────────────────────────────────
 
     private fun observeViewModel() {
         collectFlow(viewModel.loadUrlEvent) { url ->
@@ -249,6 +406,7 @@ class BrowserActivity : AppCompatActivity() {
                     switchToWebView(tabId)
                 }
             }
+            if (!isOnHomepage(url)) hideHomepage()
             activeWebView?.loadUrl(url)
         }
 
@@ -266,13 +424,15 @@ class BrowserActivity : AppCompatActivity() {
                     }
                     switchToWebView(tabId)
                     val currentUrl = tab.url
-                    updateToolbarForUrl(currentUrl)
-                    if (!binding.urlEditText.hasFocus()) {
-                        binding.urlEditText.setText(currentUrl)
+                    if (isOnHomepage(currentUrl)) {
+                        showHomepage()
+                    } else {
+                        hideHomepage()
+                        updateToolbarForUrl(currentUrl)
+                        if (!binding.urlEditText.hasFocus()) {
+                            binding.urlEditText.setText(currentUrl)
+                        }
                     }
-                    binding.btnSecureIndicator.setImageResource(
-                        if (UrlUtils.isHttps(currentUrl)) R.drawable.ic_lock else R.drawable.ic_lock_open
-                    )
                 }
             }
         }
@@ -286,24 +446,30 @@ class BrowserActivity : AppCompatActivity() {
         }
 
         collectFlow(viewModel.currentUrl) { url ->
-            if (!binding.urlEditText.hasFocus()) {
-                binding.urlEditText.setText(url)
+            if (isOnHomepage(url)) {
+                showHomepage()
+            } else {
+                hideHomepage()
+                if (!binding.urlEditText.hasFocus()) {
+                    binding.urlEditText.setText(url)
+                }
+                binding.btnSecureIndicator.setImageResource(
+                    if (UrlUtils.isHttps(url)) R.drawable.ic_lock else R.drawable.ic_globe
+                )
+                binding.btnBack.isEnabled = activeWebView?.canGoBack() == true
+                binding.btnForward.isEnabled = activeWebView?.canGoForward() == true
             }
-            binding.btnSecureIndicator.setImageResource(
-                if (UrlUtils.isHttps(url)) R.drawable.ic_lock else R.drawable.ic_lock_open
-            )
-            binding.btnBack.isEnabled = activeWebView?.canGoBack() == true
-            binding.btnForward.isEnabled = activeWebView?.canGoForward() == true
         }
 
-        collectFlow(viewModel.isBookmarked) { bookmarked ->
-            binding.btnBookmark.setImageResource(
-                if (bookmarked) R.drawable.ic_bookmark_filled else R.drawable.ic_bookmark
-            )
+        collectFlow(viewModel.isBookmarked) { _ ->
+            // bookmark state tracked in menu sheet on open
         }
 
         collectFlow(viewModel.tabs) { tabs ->
-            binding.tvTabCount.text = tabs.size.toString()
+            val countStr = tabs.size.toString()
+            binding.tvTabCount.text = countStr
+            binding.homeTabCount.text = countStr
+
             val currentTabIds = tabs.map { it.id }.toSet()
             val removedIds = webViews.keys.filter { it !in currentTabIds }
             removedIds.forEach { id -> destroyWebViewForTab(id) }
@@ -314,55 +480,21 @@ class BrowserActivity : AppCompatActivity() {
         }
     }
 
+    // ─── Tab sheet ───────────────────────────────────────────────────────────
+
     private fun showTabsSheet() {
         val sheet = TabsBottomSheet.newInstance()
         sheet.show(supportFragmentManager, TabsBottomSheet.TAG)
     }
 
-    private fun showMenuOptions() {
-        val popup = androidx.appcompat.widget.PopupMenu(this, binding.btnMenu)
-        popup.menuInflater.inflate(R.menu.browser_menu, popup.menu)
-        popup.setOnMenuItemClickListener { item ->
-            when (item.itemId) {
-                R.id.menu_new_tab -> { viewModel.openNewTab(); true }
-                R.id.menu_new_incognito -> { viewModel.openNewTab(incognito = true); true }
-                R.id.menu_settings -> { startActivity(Intent(this, SettingsActivity::class.java)); true }
-                R.id.menu_profiles -> { startActivity(Intent(this, ProfileManagerActivity::class.java)); true }
-                R.id.menu_downloads -> { startActivity(Intent(this, DownloadsActivity::class.java)); true }
-                R.id.menu_history -> {
-                    HistoryBottomSheet.newInstance().show(supportFragmentManager, HistoryBottomSheet.TAG)
-                    true
-                }
-                R.id.menu_bookmarks -> {
-                    BookmarksBottomSheet.newInstance().show(supportFragmentManager, BookmarksBottomSheet.TAG)
-                    true
-                }
-                R.id.menu_share -> {
-                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                        type = "text/plain"
-                        putExtra(Intent.EXTRA_TEXT, viewModel.currentUrl.value)
-                    }
-                    startActivity(Intent.createChooser(shareIntent, getString(R.string.share)))
-                    true
-                }
-                R.id.menu_desktop_mode -> {
-                    val newValue = !viewModel.settings.value.desktopMode
-                    viewModel.setDesktopMode(newValue)
-                    activeWebView?.reload()
-                    true
-                }
-                else -> false
-            }
-        }
-        popup.show()
-    }
+    // ─── Fullscreen video ────────────────────────────────────────────────────
 
     private fun showFullscreen(view: View, callback: WebChromeClient.CustomViewCallback) {
         fullscreenView = view
         fullscreenCallback = callback
         binding.fullscreenContainer.addView(view)
-        binding.fullscreenContainer.visible()
-        binding.mainContent.gone()
+        binding.fullscreenContainer.visibility = View.VISIBLE
+        binding.mainContent.visibility = View.GONE
         window.decorView.systemUiVisibility = (
             View.SYSTEM_UI_FLAG_FULLSCREEN or
             View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
@@ -372,21 +504,21 @@ class BrowserActivity : AppCompatActivity() {
 
     private fun hideFullscreen() {
         fullscreenCallback?.onCustomViewHidden()
-        fullscreenCallback = null
-        binding.fullscreenContainer.removeAllViews()
-        binding.fullscreenContainer.gone()
-        binding.mainContent.visible()
+        fullscreenView?.let { binding.fullscreenContainer.removeView(it) }
+        binding.fullscreenContainer.visibility = View.GONE
+        binding.mainContent.visibility = View.VISIBLE
         fullscreenView = null
         window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
     }
+
+    // ─── Intent handling ────────────────────────────────────────────────────
 
     private fun handleIntent(intent: Intent?) {
         val url = intent?.data?.toString()
         if (!url.isNullOrEmpty()) {
             viewModel.navigateTo(url)
         } else {
-            val homepage = viewModel.settings.value.homepage
-            viewModel.navigateTo(homepage)
+            showHomepage()
         }
     }
 
@@ -398,8 +530,12 @@ class BrowserActivity : AppCompatActivity() {
     override fun onBackPressed() {
         when {
             fullscreenView != null -> hideFullscreen()
+            binding.homepageOverlay.isVisible -> super.onBackPressed()
             activeWebView?.canGoBack() == true -> activeWebView?.goBack()
-            else -> super.onBackPressed()
+            else -> {
+                showHomepage()
+                viewModel.navigateTo("about:blank")
+            }
         }
     }
 

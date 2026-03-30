@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.VeloBrowser" parent="Theme.Material3.Light.NoActionBar">
+    <style name="Theme.VeloBrowser" parent="Theme.Material3.Dark.NoActionBar">
         <item name="colorPrimary">@color/color_primary</item>
         <item name="colorPrimaryVariant">@color/color_primary_variant</item>
         <item name="colorOnPrimary">@android:color/white</item>
@@ -9,17 +9,31 @@
         <item name="colorError">@color/color_error</item>
         <item name="android:colorBackground">@color/color_background</item>
         <item name="android:windowBackground">@color/color_background</item>
-        <item name="android:statusBarColor">@color/color_toolbar</item>
-        <item name="android:navigationBarColor">@color/color_toolbar</item>
-        <item name="android:windowLightStatusBar">true</item>
-        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@color/color_background</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
         <item name="android:fontFamily">sans-serif</item>
     </style>
 
     <style name="Theme.VeloBrowser.Incognito" parent="Theme.Material3.Dark.NoActionBar">
         <item name="colorPrimary">#7C4DFF</item>
-        <item name="android:colorBackground">#121212</item>
-        <item name="android:statusBarColor">#1A1A2E</item>
-        <item name="android:navigationBarColor">#1A1A2E</item>
+        <item name="android:colorBackground">#0A0A0A</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">#0A0A0A</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+
+    <!-- Via-style menu bottom sheet — dark, rounded top corners -->
+    <style name="ViaMenuBottomSheetStyle" parent="Theme.Design.Light.BottomSheetDialog">
+        <item name="android:windowIsFloating">false</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="bottomSheetStyle">@style/ViaMenuBottomSheet</item>
+        <item name="android:colorBackground">@android:color/transparent</item>
+    </style>
+
+    <style name="ViaMenuBottomSheet" parent="Widget.Design.BottomSheet.Modal">
+        <item name="android:background">@android:color/transparent</item>
     </style>
 </resources>

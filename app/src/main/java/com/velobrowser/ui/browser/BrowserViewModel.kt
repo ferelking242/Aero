@@ -143,6 +143,10 @@ class BrowserViewModel @Inject constructor(
         viewModelScope.launch { settingsDataStore.setDesktopMode(enabled) }
     }
 
+    fun setDarkMode(enabled: Boolean) {
+        viewModelScope.launch { settingsDataStore.setDarkMode(enabled) }
+    }
+
     fun toggleBookmark() {
         val url = _currentUrl.value
         val title = _currentTitle.value

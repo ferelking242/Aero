@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="96dp"
+    android:height="96dp"
+    android:viewportWidth="96"
+    android:viewportHeight="96">
+    <!-- Left diagonal slab - blue -->
+    <path
+        android:fillColor="#1A73E8"
+        android:pathData="M12,72 L28,24 L44,24 L28,72 Z" />
+    <!-- Middle diagonal slab - red -->
+    <path
+        android:fillColor="#EA4335"
+        android:pathData="M30,72 L46,24 L56,24 L40,72 Z" />
+    <!-- Right diagonal slab - yellow/orange -->
+    <path
+        android:fillColor="#FBBC04"
+        android:pathData="M52,24 L68,24 L84,72 L68,72 Z" />
+</vector>

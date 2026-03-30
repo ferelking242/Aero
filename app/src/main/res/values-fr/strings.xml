@@ -11,10 +11,14 @@
     <string name="home">Accueil</string>
     <string name="tabs">Onglets</string>
     <string name="new_tab">Nouvel onglet</string>
+    <string name="new_incognito_tab">Nouvel onglet incognito</string>
     <string name="close_tab">Fermer l\'onglet</string>
     <string name="incognito">Incognito</string>
+    <string name="incognito_mode">Mode incognito</string>
+    <string name="night_mode">Mode nuit</string>
     <string name="bookmark">Favori</string>
     <string name="bookmarks">Favoris</string>
+    <string name="add_bookmark">Ajouter aux favoris</string>
     <string name="history">Historique</string>
     <string name="menu">Menu</string>
     <string name="share">Partager</string>
@@ -42,7 +46,7 @@
     <string name="ultra_fast_mode_summary">Désactive les images et les scripts lourds pour un chargement plus rapide</string>
     <string name="safe_browsing">Navigation sécurisée</string>
     <string name="safe_browsing_summary">Protection contre les sites malveillants</string>
-    <string name="desktop_mode">Mode bureau</string>
+    <string name="desktop_mode">Version ordinateur</string>
     <string name="search_engine">Moteur de recherche par défaut</string>
     <string name="homepage">Page d\'accueil</string>
     <string name="language">Langue</string>
@@ -89,7 +93,7 @@
     <string name="menu_settings">Paramètres</string>
     <string name="menu_profiles">Profils</string>
     <string name="menu_share">Partager</string>
-    <string name="menu_desktop_mode">Mode bureau</string>
+    <string name="menu_desktop_mode">Version ordinateur</string>
 
     <!-- Tabs UI -->
     <string name="close_all">Tout fermer</string>
