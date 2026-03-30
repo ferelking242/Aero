@@ -4,6 +4,8 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.print.PrintAttributes
+import android.print.PrintManager
 import android.view.KeyEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
@@ -24,6 +26,7 @@ import com.velobrowser.core.isolated.IsolatedTabReceiver
 import com.velobrowser.databinding.ActivityBrowserBinding
 import com.velobrowser.domain.model.BrowserTab
 import com.velobrowser.ui.isolated.IsolatedBrowserActivity
+import com.velobrowser.service.BrowserKeepAliveService
 import com.velobrowser.ui.menu.MenuBottomSheet
 import com.velobrowser.ui.tabs.TabsBottomSheet
 import com.velobrowser.utils.*
@@ -436,6 +439,11 @@ class BrowserActivity : AppCompatActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        BrowserKeepAliveService.stop(this)
+    }
+
     override fun onPause() {
         super.onPause()
         CookieManager.getInstance().flush()
@@ -451,6 +459,19 @@ class BrowserActivity : AppCompatActivity() {
 
     override fun onStop() {
         super.onStop()
+        BrowserKeepAliveService.start(this)
+    }
+
+    fun printCurrentPage() {
+        val wv = activeWebView ?: return
+        val pm = getSystemService(PrintManager::class.java) ?: return
+        val jobName = "${getString(R.string.app_name)} — ${viewModel.currentUrl.value}"
+        pm.print(jobName, wv.createPrintDocumentAdapter(jobName), PrintAttributes.Builder().build())
+    }
+
+    @Suppress("DEPRECATION")
+    fun findInPage() {
+        activeWebView?.showFindDialog(null, true)
     }
 
     override fun onDestroy() {

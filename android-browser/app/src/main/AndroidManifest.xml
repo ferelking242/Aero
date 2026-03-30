@@ -3,6 +3,7 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
@@ -105,6 +106,13 @@
             android:windowSoftInputMode="adjustResize"
             android:taskAffinity="${applicationId}.isolated4"
             android:label="@string/isolated_tab_label" />
+
+        <!-- ===== MAIN BROWSER KEEP-ALIVE SERVICE ===== -->
+
+        <service
+            android:name=".service.BrowserKeepAliveService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
         <!-- ===== KEEP-ALIVE FOREGROUND SERVICES (one per isolated process) ===== -->
 

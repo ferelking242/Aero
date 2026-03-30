@@ -136,4 +136,17 @@
     <string name="return_to_main">Return to main browser</string>
     <string name="open_in_isolated_tab">Open in Isolated Tab</string>
     <string name="isolated_tab_slot">Slot %d</string>
+
+    <!-- Main browser keep-alive -->
+    <string name="browser_channel_name">Aero Browser</string>
+    <string name="browser_channel_desc">Keeps the browser active in the background</string>
+    <string name="browser_notification_title">Aero Browser is active</string>
+    <string name="browser_notification_text">Running in background — tap to return</string>
+
+    <!-- Menu page 3 -->
+    <string name="menu_copy_url">Copy URL</string>
+    <string name="menu_source">Source</string>
+    <string name="menu_find">Find</string>
+    <string name="menu_print">Print</string>
+    <string name="url_copied">URL copied</string>
 </resources>
