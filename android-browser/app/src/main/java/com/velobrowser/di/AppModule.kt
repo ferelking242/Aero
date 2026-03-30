@@ -1,8 +1,6 @@
 package com.velobrowser.di
 
 import android.content.Context
-import com.velobrowser.core.adblocker.AdBlocker
-import com.velobrowser.data.local.datastore.SettingsDataStore
 import com.velobrowser.data.local.db.VeloDatabase
 import com.velobrowser.data.local.db.dao.*
 import com.velobrowser.data.repository.*
@@ -50,13 +48,4 @@ object AppModule {
     @Provides
     @Singleton
     fun provideDownloadRepository(impl: DownloadRepositoryImpl): DownloadRepository = impl
-
-    @Provides
-    @Singleton
-    fun provideSettingsDataStore(@ApplicationContext context: Context): SettingsDataStore =
-        SettingsDataStore(context)
-
-    @Provides
-    @Singleton
-    fun provideAdBlocker(): AdBlocker = AdBlocker()
 }

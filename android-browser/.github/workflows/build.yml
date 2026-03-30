@@ -1,11 +1,7 @@
-name: Build Velo Browser APK
+name: Build Aero Browser APK
 
 on:
   push:
-    branches:
-      - main
-      - develop
-  pull_request:
     branches:
       - main
   workflow_dispatch:
@@ -51,7 +47,7 @@ jobs:
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: velo-browser-debug-${{ github.sha }}
+          name: aero-browser-debug-${{ github.sha }}
           path: android-browser/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
           if-no-files-found: error
@@ -59,7 +55,7 @@ jobs:
       - name: Upload Release APK (unsigned)
         uses: actions/upload-artifact@v4
         with:
-          name: velo-browser-release-unsigned-${{ github.sha }}
+          name: aero-browser-release-unsigned-${{ github.sha }}
           path: android-browser/app/build/outputs/apk/release/app-release-unsigned.apk
           retention-days: 30
           if-no-files-found: error
@@ -121,7 +117,7 @@ jobs:
       - name: Download Debug APK artifact
         uses: actions/download-artifact@v4
         with:
-          name: velo-browser-debug-${{ github.sha }}
+          name: aero-browser-debug-${{ github.sha }}
           path: apks/
 
       - name: Get version from build.gradle.kts
@@ -136,20 +132,22 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.get_version.outputs.tag }}
-          name: Velo Browser ${{ steps.get_version.outputs.version }}
+          name: Aero Browser ${{ steps.get_version.outputs.version }}
           body: |
-            ## Velo Browser ${{ steps.get_version.outputs.version }}
+            ## Aero Browser ${{ steps.get_version.outputs.version }}
 
             ### What's included
-            - Multi-tab browsing with isolated WebView sessions per tab
-            - Multi-profile browsing (separate cookie sessions per account)
+            - TRUE multi-process isolated tabs (up to 4) with separate cookies, localStorage, session & cache
+            - Tabs always active — never paused in background, JS timers kept alive
+            - Normal tabs with shared session (lightweight)
             - Built-in ad blocker with bundled EasyList rules
-            - Chrome-style tab switcher with incognito/normal grouping
+            - Chrome-style tab switcher with Normal / Incognito / Isolated sections
             - Full settings system (JavaScript, images, desktop mode, dark mode, etc.)
             - Multi-language support (English & French)
             - Download manager with notification support
             - Safe browsing & HTTPS enforcement
             - Ultra Fast Mode (disables images and heavy scripts)
+            - Privacy / Incognito mode
 
             ### Installation
             Download `app-debug.apk` and install on your Android device (API 24+).

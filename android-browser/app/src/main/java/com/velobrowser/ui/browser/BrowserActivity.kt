@@ -1,5 +1,6 @@
 package com.velobrowser.ui.browser
 
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -17,9 +18,12 @@ import com.velobrowser.R
 import com.velobrowser.core.adblocker.AdBlocker
 import com.velobrowser.core.browser.*
 import com.velobrowser.core.download.VeloDownloadManager
+import com.velobrowser.core.isolated.IsolatedTabManager
+import com.velobrowser.core.isolated.IsolatedTabReceiver
 import com.velobrowser.databinding.ActivityBrowserBinding
 import com.velobrowser.domain.model.BrowserTab
 import com.velobrowser.ui.downloads.DownloadsActivity
+import com.velobrowser.ui.isolated.IsolatedBrowserActivity
 import com.velobrowser.ui.profiles.ProfileManagerActivity
 import com.velobrowser.ui.settings.SettingsActivity
 import com.velobrowser.ui.tabs.TabsBottomSheet
@@ -35,10 +39,14 @@ class BrowserActivity : AppCompatActivity() {
 
     @Inject lateinit var adBlocker: AdBlocker
     @Inject lateinit var downloadManager: VeloDownloadManager
+    @Inject lateinit var isolatedTabManager: IsolatedTabManager
+    @Inject lateinit var tabManager: com.velobrowser.core.tabs.TabManager
 
     private val webViews = LinkedHashMap<String, WebView>()
     private var fullscreenView: View? = null
     private var fullscreenCallback: WebChromeClient.CustomViewCallback? = null
+
+    private lateinit var isolatedTabReceiver: IsolatedTabReceiver
 
     private val activeWebView: WebView?
         get() = webViews[viewModel.activeTabId.value]
@@ -54,6 +62,7 @@ class BrowserActivity : AppCompatActivity() {
         setupUrlBar()
         setupNavigationControls()
         setupBottomBar()
+        registerIsolatedTabReceiver()
         observeViewModel()
 
         handleIntent(intent)
@@ -68,6 +77,20 @@ class BrowserActivity : AppCompatActivity() {
         if (permissions.isNotEmpty()) {
             requestPermissions(permissions, 1001)
         }
+    }
+
+    private fun registerIsolatedTabReceiver() {
+        isolatedTabReceiver = IsolatedTabReceiver(
+            tabManager = tabManager,
+            isolatedTabManager = isolatedTabManager,
+            onSlotUpdated = { slot, url, title ->
+                viewModel.onIsolatedSlotUpdated(slot, url, title)
+            },
+            onSlotClosed = { slot ->
+                viewModel.onIsolatedSlotClosed(slot)
+            }
+        )
+        IsolatedTabReceiver.register(this, isolatedTabReceiver)
     }
 
     private fun createWebViewForTab(tab: BrowserTab): WebView {
@@ -256,10 +279,14 @@ class BrowserActivity : AppCompatActivity() {
             showTabsSheet()
         }
 
+        collectFlow(viewModel.openIsolatedTabEvent) { (slot, url) ->
+            launchIsolatedTab(slot, url)
+        }
+
         collectFlow(viewModel.activeTabId) { tabId ->
             if (tabId != null) {
                 val tab = viewModel.tabs.value.find { it.id == tabId }
-                if (tab != null) {
+                if (tab != null && !tab.isIsolated) {
                     if (!webViews.containsKey(tabId)) {
                         val wv = createWebViewForTab(tab)
                         webViews[tabId] = wv
@@ -303,8 +330,12 @@ class BrowserActivity : AppCompatActivity() {
         }
 
         collectFlow(viewModel.tabs) { tabs ->
-            binding.tvTabCount.text = tabs.size.toString()
-            val currentTabIds = tabs.map { it.id }.toSet()
+            val nonIsolatedCount = tabs.count { !it.isIsolated }
+            val isolatedCount = tabs.count { it.isIsolated }
+            val displayCount = nonIsolatedCount + isolatedCount
+            binding.tvTabCount.text = displayCount.toString()
+
+            val currentTabIds = tabs.filter { !it.isIsolated }.map { it.id }.toSet()
             val removedIds = webViews.keys.filter { it !in currentTabIds }
             removedIds.forEach { id -> destroyWebViewForTab(id) }
         }
@@ -312,6 +343,11 @@ class BrowserActivity : AppCompatActivity() {
         collectFlow(viewModel.settings) { settings ->
             webViews.values.forEach { wv -> WebViewFactory.applySettings(wv, settings) }
         }
+    }
+
+    private fun launchIsolatedTab(slot: Int, url: String) {
+        val intent = IsolatedBrowserActivity.createIntent(this, slot, url)
+        startActivity(intent)
     }
 
     private fun showTabsSheet() {
@@ -322,10 +358,31 @@ class BrowserActivity : AppCompatActivity() {
     private fun showMenuOptions() {
         val popup = androidx.appcompat.widget.PopupMenu(this, binding.btnMenu)
         popup.menuInflater.inflate(R.menu.browser_menu, popup.menu)
+
+        val canOpenIsolated = viewModel.canOpenIsolatedTab()
+        popup.menu.findItem(R.id.menu_new_isolated)?.isEnabled = canOpenIsolated
+        popup.menu.findItem(R.id.menu_open_isolated)?.isEnabled = canOpenIsolated
+
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 R.id.menu_new_tab -> { viewModel.openNewTab(); true }
                 R.id.menu_new_incognito -> { viewModel.openNewTab(incognito = true); true }
+                R.id.menu_new_isolated -> {
+                    if (canOpenIsolated) {
+                        viewModel.openIsolatedTab()
+                    } else {
+                        toast(getString(R.string.max_isolated_tabs_reached))
+                    }
+                    true
+                }
+                R.id.menu_open_isolated -> {
+                    if (canOpenIsolated) {
+                        viewModel.openCurrentUrlInIsolatedTab()
+                    } else {
+                        toast(getString(R.string.max_isolated_tabs_reached))
+                    }
+                    true
+                }
                 R.id.menu_settings -> { startActivity(Intent(this, SettingsActivity::class.java)); true }
                 R.id.menu_profiles -> { startActivity(Intent(this, ProfileManagerActivity::class.java)); true }
                 R.id.menu_downloads -> { startActivity(Intent(this, DownloadsActivity::class.java)); true }
@@ -363,6 +420,7 @@ class BrowserActivity : AppCompatActivity() {
         binding.fullscreenContainer.addView(view)
         binding.fullscreenContainer.visible()
         binding.mainContent.gone()
+        @Suppress("DEPRECATION")
         window.decorView.systemUiVisibility = (
             View.SYSTEM_UI_FLAG_FULLSCREEN or
             View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
@@ -377,6 +435,7 @@ class BrowserActivity : AppCompatActivity() {
         binding.fullscreenContainer.gone()
         binding.mainContent.visible()
         fullscreenView = null
+        @Suppress("DEPRECATION")
         window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
     }
 
@@ -405,16 +464,26 @@ class BrowserActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
-        webViews.values.forEach { it.onPause() }
+        // Only flush cookies — do NOT call webView.onPause() to keep JS timers alive
         CookieManager.getInstance().flush()
     }
 
     override fun onResume() {
         super.onResume()
-        webViews.values.forEach { it.onResume() }
+        // Resume all WebView rendering and timers
+        webViews.values.forEach { wv ->
+            wv.onResume()
+            wv.resumeTimers()
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // Intentionally do NOT pause WebViews — keep background execution alive
     }
 
     override fun onDestroy() {
+        runCatching { unregisterReceiver(isolatedTabReceiver) }
         binding.webViewContainer.removeAllViews()
         webViews.values.forEach { wv ->
             wv.stopLoading()

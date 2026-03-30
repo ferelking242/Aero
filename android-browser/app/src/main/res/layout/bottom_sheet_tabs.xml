@@ -46,7 +46,7 @@
 
     </LinearLayout>
 
-    <!-- Tab type selector: Tabs | Incognito -->
+    <!-- Tab type selector: Tabs | Incognito | Isolated -->
     <com.google.android.material.tabs.TabLayout
         android:id="@+id/tabTypeSelector"
         android:layout_width="match_parent"
@@ -73,6 +73,21 @@
         android:paddingBottom="8dp"
         android:clipToPadding="false" />
 
+    <!-- Isolated info banner (shown only on Isolated tab) -->
+    <TextView
+        android:id="@+id/tvIsolatedInfo"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        android:text="@string/isolated_tab_info"
+        android:textSize="12sp"
+        android:textColor="@color/color_text_secondary"
+        android:background="@color/color_isolated_preview_bg"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="10dp" />
+
     <!-- Bottom action bar -->
     <LinearLayout
         android:layout_width="match_parent"
@@ -87,21 +102,32 @@
             android:layout_width="0dp"
             android:layout_weight="1"
             android:layout_height="40dp"
-            android:layout_marginStart="12dp"
-            android:layout_marginEnd="6dp"
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="4dp"
             style="@style/Widget.Material3.Button.OutlinedButton"
             android:text="@string/incognito"
-            android:textSize="13sp" />
+            android:textSize="12sp" />
 
         <Button
             android:id="@+id/btnNewTab"
             android:layout_width="0dp"
             android:layout_weight="1"
             android:layout_height="40dp"
-            android:layout_marginStart="6dp"
-            android:layout_marginEnd="12dp"
+            android:layout_marginStart="4dp"
+            android:layout_marginEnd="4dp"
             android:text="@string/new_tab"
-            android:textSize="13sp" />
+            android:textSize="12sp" />
+
+        <Button
+            android:id="@+id/btnNewIsolated"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="40dp"
+            android:layout_marginStart="4dp"
+            android:layout_marginEnd="8dp"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:text="@string/isolated_tab"
+            android:textSize="12sp" />
 
     </LinearLayout>
 

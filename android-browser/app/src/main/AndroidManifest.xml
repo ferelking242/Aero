@@ -9,6 +9,8 @@
         android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.DOWNLOAD_WITHOUT_NOTIFICATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <application
         android:name=".VeloApplication"
@@ -21,6 +23,8 @@
         android:networkSecurityConfig="@xml/network_security_config"
         android:hardwareAccelerated="true"
         android:largeHeap="true">
+
+        <!-- ===== MAIN PROCESS ACTIVITIES ===== -->
 
         <activity
             android:name=".ui.browser.BrowserActivity"
@@ -58,6 +62,77 @@
             android:exported="false"
             android:parentActivityName=".ui.browser.BrowserActivity"
             android:label="@string/downloads" />
+
+        <!-- ===== ISOLATED TAB PROCESSES ===== -->
+        <!-- Each runs in its own Android process with separate cookies, storage & cache -->
+
+        <activity
+            android:name=".ui.isolated.IsolatedSlot1Activity"
+            android:exported="false"
+            android:process=":isolated1"
+            android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:windowSoftInputMode="adjustResize"
+            android:taskAffinity="${applicationId}.isolated1"
+            android:label="@string/isolated_tab_label" />
+
+        <activity
+            android:name=".ui.isolated.IsolatedSlot2Activity"
+            android:exported="false"
+            android:process=":isolated2"
+            android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:windowSoftInputMode="adjustResize"
+            android:taskAffinity="${applicationId}.isolated2"
+            android:label="@string/isolated_tab_label" />
+
+        <activity
+            android:name=".ui.isolated.IsolatedSlot3Activity"
+            android:exported="false"
+            android:process=":isolated3"
+            android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:windowSoftInputMode="adjustResize"
+            android:taskAffinity="${applicationId}.isolated3"
+            android:label="@string/isolated_tab_label" />
+
+        <activity
+            android:name=".ui.isolated.IsolatedSlot4Activity"
+            android:exported="false"
+            android:process=":isolated4"
+            android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:windowSoftInputMode="adjustResize"
+            android:taskAffinity="${applicationId}.isolated4"
+            android:label="@string/isolated_tab_label" />
+
+        <!-- ===== KEEP-ALIVE FOREGROUND SERVICES (one per isolated process) ===== -->
+
+        <service
+            android:name=".service.TabKeepAliveService1"
+            android:exported="false"
+            android:process=":isolated1"
+            android:foregroundServiceType="dataSync" />
+
+        <service
+            android:name=".service.TabKeepAliveService2"
+            android:exported="false"
+            android:process=":isolated2"
+            android:foregroundServiceType="dataSync" />
+
+        <service
+            android:name=".service.TabKeepAliveService3"
+            android:exported="false"
+            android:process=":isolated3"
+            android:foregroundServiceType="dataSync" />
+
+        <service
+            android:name=".service.TabKeepAliveService4"
+            android:exported="false"
+            android:process=":isolated4"
+            android:foregroundServiceType="dataSync" />
+
+        <!-- ===== FILE PROVIDER ===== -->
 
         <provider
             android:name="androidx.core.content.FileProvider"

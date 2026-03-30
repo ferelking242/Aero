@@ -2,6 +2,8 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:id="@+id/menu_new_tab" android:title="@string/menu_new_tab" />
     <item android:id="@+id/menu_new_incognito" android:title="@string/menu_new_incognito" />
+    <item android:id="@+id/menu_new_isolated" android:title="@string/menu_new_isolated" />
+    <item android:id="@+id/menu_open_isolated" android:title="@string/menu_open_isolated" />
     <item android:id="@+id/menu_history" android:title="@string/menu_history" />
     <item android:id="@+id/menu_bookmarks" android:title="@string/menu_bookmarks" />
     <item android:id="@+id/menu_downloads" android:title="@string/menu_downloads" />

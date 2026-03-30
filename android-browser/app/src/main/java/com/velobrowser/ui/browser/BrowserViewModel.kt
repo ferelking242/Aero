@@ -2,6 +2,7 @@ package com.velobrowser.ui.browser
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.velobrowser.core.isolated.IsolatedTabManager
 import com.velobrowser.core.tabs.TabManager
 import com.velobrowser.data.local.datastore.BrowserSettings
 import com.velobrowser.data.local.datastore.SettingsDataStore
@@ -19,6 +20,7 @@ import javax.inject.Inject
 @HiltViewModel
 class BrowserViewModel @Inject constructor(
     private val tabManager: TabManager,
+    private val isolatedTabManager: IsolatedTabManager,
     private val settingsDataStore: SettingsDataStore,
     private val historyRepository: HistoryRepository,
     private val bookmarkRepository: BookmarkRepository,
@@ -29,12 +31,16 @@ class BrowserViewModel @Inject constructor(
     val activeTabId: StateFlow<String?> = tabManager.activeTabId
     val settings: StateFlow<BrowserSettings> = settingsDataStore.settings
         .stateIn(viewModelScope, SharingStarted.Eagerly, BrowserSettings())
+    val isolatedTabs = isolatedTabManager.isolatedTabs
 
     private val _loadUrlEvent = MutableSharedFlow<String>()
     val loadUrlEvent: SharedFlow<String> = _loadUrlEvent.asSharedFlow()
 
     private val _showTabsEvent = MutableSharedFlow<Unit>()
     val showTabsEvent: SharedFlow<Unit> = _showTabsEvent.asSharedFlow()
+
+    private val _openIsolatedTabEvent = MutableSharedFlow<Pair<Int, String>>()
+    val openIsolatedTabEvent: SharedFlow<Pair<Int, String>> = _openIsolatedTabEvent.asSharedFlow()
 
     private val _pageProgress = MutableStateFlow(0)
     val pageProgress: StateFlow<Int> = _pageProgress.asStateFlow()
@@ -73,6 +79,26 @@ class BrowserViewModel @Inject constructor(
             viewModelScope.launch { _loadUrlEvent.emit(url) }
         }
     }
+
+    fun openIsolatedTab(url: String = "") {
+        if (!isolatedTabManager.canOpenMore()) return
+        val slot = isolatedTabManager.nextAvailableSlot()
+        if (slot < 1) return
+        isolatedTabManager.openSlot(slot, url)
+        tabManager.openIsolatedTab(url, slot)
+        viewModelScope.launch {
+            _openIsolatedTabEvent.emit(Pair(slot, url))
+        }
+    }
+
+    fun openCurrentUrlInIsolatedTab() {
+        val url = _currentUrl.value.ifEmpty { settings.value.homepage }
+        openIsolatedTab(url)
+    }
+
+    fun canOpenIsolatedTab(): Boolean = isolatedTabManager.canOpenMore()
+
+    fun isolatedTabCount(): Int = isolatedTabManager.count()
 
     fun closeTab(tabId: String) {
         tabManager.closeTab(tabId)
@@ -177,4 +203,12 @@ class BrowserViewModel @Inject constructor(
     fun getBookmarks() = bookmarkRepository.getBookmarksForProfile(activeProfileId)
     fun getHistory() = historyRepository.getHistoryForProfile(activeProfileId)
     fun tabCount() = tabManager.tabCount()
+    fun onIsolatedSlotClosed(slot: Int) {
+        isolatedTabManager.closeSlot(slot)
+        tabManager.closeIsolatedTab(slot)
+    }
+    fun onIsolatedSlotUpdated(slot: Int, url: String, title: String) {
+        isolatedTabManager.updateSlot(slot, url, title)
+        tabManager.updateIsolatedTabBySlot(slot) { it.copy(url = url, title = title) }
+    }
 }

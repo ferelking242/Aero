@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Velo Browser</string>
+    <string name="app_name">Aero Browser</string>
 
     <!-- Browser UI -->
     <string name="search_or_enter_url">Search or enter URL…</string>
@@ -83,6 +83,8 @@
     <!-- Menu -->
     <string name="menu_new_tab">New Tab</string>
     <string name="menu_new_incognito">New Incognito Tab</string>
+    <string name="menu_new_isolated">New Isolated Tab</string>
+    <string name="menu_open_isolated">Open in Isolated Tab</string>
     <string name="menu_history">History</string>
     <string name="menu_bookmarks">Bookmarks</string>
     <string name="menu_downloads">Downloads</string>
@@ -95,6 +97,7 @@
     <string name="close_all">Close all</string>
     <string name="tab_count_label">tabs</string>
     <string name="incognito_tabs_label">incognito tabs</string>
+    <string name="isolated_tabs_label">isolated tabs</string>
 
     <!-- Settings additions -->
     <string name="desktop_mode_summary">Request desktop versions of websites</string>
@@ -104,8 +107,26 @@
 
     <!-- About -->
     <string name="app_version">Version</string>
-    <string name="app_version_value">1.0.0 (1)</string>
+    <string name="app_version_value">2.0.0 (2)</string>
     <string name="open_source">Open Source</string>
-    <string name="open_source_summary">Velo Browser — Fast, lightweight, and private</string>
-    <string name="about_description">Velo Browser — Fast, lightweight, and private.</string>
+    <string name="open_source_summary">Aero Browser — Fast, multi-process, and private</string>
+    <string name="about_description">Aero Browser — Fast, multi-process, and private.</string>
+
+    <!-- Isolated Tabs -->
+    <string name="isolated_tab">Isolated Tab</string>
+    <string name="isolated_tabs">Isolated</string>
+    <string name="isolated_tab_label">Aero Isolated</string>
+    <string name="isolated_slot_badge">Isolated · Slot %d</string>
+    <string name="close_isolated_tab">Close isolated tab</string>
+    <string name="max_isolated_tabs_reached">Maximum 4 isolated tabs reached</string>
+    <string name="no_isolated_tabs">No isolated tabs open</string>
+    <string name="isolated_tab_info">Each isolated tab runs in its own process with separate cookies, localStorage and cache — ideal for multi-account browsing.</string>
+    <string name="new_isolated_tab">New Isolated Tab</string>
+    <string name="isolated_tab_notification_title">Isolated Tab %d Active</string>
+    <string name="isolated_tab_notification_text">Running in background — session protected</string>
+    <string name="isolated_tab_channel_name">Isolated Tabs</string>
+    <string name="isolated_tab_channel_desc">Keeps isolated browser tabs alive in the background</string>
+    <string name="return_to_main">Return to main browser</string>
+    <string name="open_in_isolated_tab">Open in Isolated Tab</string>
+    <string name="isolated_tab_slot">Slot %d</string>
 </resources>

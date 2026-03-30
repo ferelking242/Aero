@@ -19,36 +19,70 @@ class TabsAdapter(
 
     inner class ViewHolder(private val binding: ItemTabBinding) :
         RecyclerView.ViewHolder(binding.root) {
+
         fun bind(tab: BrowserTab) {
-            val title = tab.title.ifBlank { binding.root.context.getString(R.string.new_tab) }
+            val ctx = binding.root.context
+            val title = tab.title.ifBlank { ctx.getString(R.string.new_tab) }
             binding.tvTabTitle.text = title
             binding.tvTabUrl.text = tab.url
 
             val isActive = tab.id == activeTabId()
 
-            val strokeColor = when {
-                isActive && tab.isIncognito ->
-                    ContextCompat.getColor(binding.root.context, R.color.color_incognito)
-                isActive ->
-                    ContextCompat.getColor(binding.root.context, com.google.android.material.R.color.design_default_color_primary)
-                else ->
-                    ContextCompat.getColor(binding.root.context, android.R.color.transparent)
-            }
-            binding.root.strokeColor = strokeColor
-            binding.root.strokeWidth = if (isActive) 5 else 0
-
-            if (tab.isIncognito) {
-                binding.ivIncognito.visibility = View.VISIBLE
-                binding.ivIncognitoCenter.visibility = View.VISIBLE
-                binding.tabPreviewArea.setBackgroundColor(
-                    ContextCompat.getColor(binding.root.context, R.color.color_incognito_preview_bg)
-                )
-            } else {
-                binding.ivIncognito.visibility = View.GONE
-                binding.ivIncognitoCenter.visibility = View.GONE
-                binding.tabPreviewArea.setBackgroundColor(
-                    ContextCompat.getColor(binding.root.context, R.color.color_tab_preview_bg)
-                )
+            when {
+                tab.isIsolated -> {
+                    binding.ivIncognito.visibility = View.VISIBLE
+                    binding.ivIncognito.setImageResource(R.drawable.ic_isolated_tab)
+                    binding.ivIncognito.setColorFilter(
+                        ContextCompat.getColor(ctx, R.color.color_isolated_accent)
+                    )
+                    binding.ivIncognitoCenter.visibility = View.VISIBLE
+                    binding.ivIncognitoCenter.setImageResource(R.drawable.ic_isolated_tab)
+                    binding.ivIncognitoCenter.setColorFilter(
+                        ContextCompat.getColor(ctx, R.color.color_isolated_accent)
+                    )
+                    binding.tabPreviewArea.setBackgroundColor(
+                        ContextCompat.getColor(ctx, R.color.color_isolated_preview_bg)
+                    )
+                    val strokeColor = if (isActive) {
+                        ContextCompat.getColor(ctx, R.color.color_isolated_accent)
+                    } else {
+                        ContextCompat.getColor(ctx, android.R.color.transparent)
+                    }
+                    binding.root.strokeColor = strokeColor
+                    binding.root.strokeWidth = if (isActive) 5 else 0
+                }
+                tab.isIncognito -> {
+                    binding.ivIncognito.visibility = View.VISIBLE
+                    binding.ivIncognito.setImageResource(R.drawable.ic_incognito)
+                    binding.ivIncognito.colorFilter = null
+                    binding.ivIncognitoCenter.visibility = View.VISIBLE
+                    binding.ivIncognitoCenter.setImageResource(R.drawable.ic_incognito)
+                    binding.ivIncognitoCenter.colorFilter = null
+                    binding.tabPreviewArea.setBackgroundColor(
+                        ContextCompat.getColor(ctx, R.color.color_incognito_preview_bg)
+                    )
+                    val strokeColor = if (isActive) {
+                        ContextCompat.getColor(ctx, R.color.color_incognito)
+                    } else {
+                        ContextCompat.getColor(ctx, android.R.color.transparent)
+                    }
+                    binding.root.strokeColor = strokeColor
+                    binding.root.strokeWidth = if (isActive) 5 else 0
+                }
+                else -> {
+                    binding.ivIncognito.visibility = View.GONE
+                    binding.ivIncognitoCenter.visibility = View.GONE
+                    binding.tabPreviewArea.setBackgroundColor(
+                        ContextCompat.getColor(ctx, R.color.color_tab_preview_bg)
+                    )
+                    val strokeColor = if (isActive) {
+                        ContextCompat.getColor(ctx, com.google.android.material.R.color.design_default_color_primary)
+                    } else {
+                        ContextCompat.getColor(ctx, android.R.color.transparent)
+                    }
+                    binding.root.strokeColor = strokeColor
+                    binding.root.strokeWidth = if (isActive) 5 else 0
+                }
             }
 
             binding.root.setOnClickListener { onTabClicked(tab) }

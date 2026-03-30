@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Velo Browser</string>
+    <string name="app_name">Aero Browser</string>
 
-    <!-- Browser UI -->
+    <!-- Interface navigateur -->
     <string name="search_or_enter_url">Rechercher ou entrer une URL…</string>
     <string name="back">Retour</string>
     <string name="forward">Suivant</string>
@@ -12,7 +12,7 @@
     <string name="tabs">Onglets</string>
     <string name="new_tab">Nouvel onglet</string>
     <string name="close_tab">Fermer l\'onglet</string>
-    <string name="incognito">Incognito</string>
+    <string name="incognito">Navigation privée</string>
     <string name="bookmark">Favori</string>
     <string name="bookmarks">Favoris</string>
     <string name="history">Historique</string>
@@ -23,11 +23,11 @@
     <string name="connection_secure">La connexion est sécurisée</string>
     <string name="connection_not_secure">La connexion n\'est pas sécurisée</string>
 
-    <!-- Navigation errors -->
+    <!-- Erreurs de navigation -->
     <string name="error_loading_page">Erreur : %1$s</string>
     <string name="error_ssl">Erreur de certificat SSL — connexion refusée</string>
 
-    <!-- Settings -->
+    <!-- Paramètres -->
     <string name="settings">Paramètres</string>
     <string name="settings_browser">Navigateur</string>
     <string name="settings_privacy">Confidentialité</string>
@@ -56,7 +56,7 @@
     <string name="confirm">Confirmer</string>
     <string name="cancel">Annuler</string>
 
-    <!-- Profiles -->
+    <!-- Profils -->
     <string name="profiles">Profils</string>
     <string name="create_profile">Créer un profil</string>
     <string name="delete_profile">Supprimer le profil</string>
@@ -69,7 +69,7 @@
     <string name="delete">Supprimer</string>
     <string name="rename">Renommer</string>
 
-    <!-- Downloads -->
+    <!-- Téléchargements -->
     <string name="downloads">Téléchargements</string>
     <string name="download_started">Téléchargement démarré</string>
     <string name="download_pending">En attente</string>
@@ -82,7 +82,9 @@
 
     <!-- Menu -->
     <string name="menu_new_tab">Nouvel onglet</string>
-    <string name="menu_new_incognito">Nouvel onglet incognito</string>
+    <string name="menu_new_incognito">Nouvel onglet privé</string>
+    <string name="menu_new_isolated">Nouvel onglet isolé</string>
+    <string name="menu_open_isolated">Ouvrir dans un onglet isolé</string>
     <string name="menu_history">Historique</string>
     <string name="menu_bookmarks">Favoris</string>
     <string name="menu_downloads">Téléchargements</string>
@@ -91,21 +93,40 @@
     <string name="menu_share">Partager</string>
     <string name="menu_desktop_mode">Mode bureau</string>
 
-    <!-- Tabs UI -->
+    <!-- Interface onglets -->
     <string name="close_all">Tout fermer</string>
     <string name="tab_count_label">onglets</string>
-    <string name="incognito_tabs_label">onglets incognito</string>
+    <string name="incognito_tabs_label">onglets privés</string>
+    <string name="isolated_tabs_label">onglets isolés</string>
 
-    <!-- Settings additions -->
+    <!-- Paramètres supplémentaires -->
     <string name="desktop_mode_summary">Demander la version bureau des sites web</string>
     <string name="dark_mode">Mode sombre</string>
     <string name="dark_mode_summary">Utiliser le thème sombre dans tout le navigateur</string>
     <string name="restart_to_apply">Redémarrez l\'application pour appliquer ce changement</string>
 
-    <!-- About -->
+    <!-- À propos -->
     <string name="app_version">Version</string>
-    <string name="app_version_value">1.0.0 (1)</string>
+    <string name="app_version_value">2.0.0 (2)</string>
     <string name="open_source">Open Source</string>
-    <string name="open_source_summary">Velo Browser — Rapide, léger et privé</string>
-    <string name="about_description">Velo Browser — Rapide, léger et privé.</string>
+    <string name="open_source_summary">Aero Browser — Rapide, multi-processus et privé</string>
+    <string name="about_description">Aero Browser — Rapide, multi-processus et privé.</string>
+
+    <!-- Onglets isolés -->
+    <string name="isolated_tab">Onglet isolé</string>
+    <string name="isolated_tabs">Isolés</string>
+    <string name="isolated_tab_label">Aero Isolé</string>
+    <string name="isolated_slot_badge">Isolé · Slot %d</string>
+    <string name="close_isolated_tab">Fermer l\'onglet isolé</string>
+    <string name="max_isolated_tabs_reached">Maximum 4 onglets isolés atteint</string>
+    <string name="no_isolated_tabs">Aucun onglet isolé ouvert</string>
+    <string name="isolated_tab_info">Chaque onglet isolé s\'exécute dans son propre processus avec des cookies, un stockage local et un cache séparés — idéal pour la navigation multi-comptes.</string>
+    <string name="new_isolated_tab">Nouvel onglet isolé</string>
+    <string name="isolated_tab_notification_title">Onglet isolé %d actif</string>
+    <string name="isolated_tab_notification_text">En arrière-plan — session protégée</string>
+    <string name="isolated_tab_channel_name">Onglets isolés</string>
+    <string name="isolated_tab_channel_desc">Maintient les onglets isolés actifs en arrière-plan</string>
+    <string name="return_to_main">Retour au navigateur principal</string>
+    <string name="open_in_isolated_tab">Ouvrir dans un onglet isolé</string>
+    <string name="isolated_tab_slot">Slot %d</string>
 </resources>

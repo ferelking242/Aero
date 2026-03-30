@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version_name:
-        description: 'Version name (e.g. 1.0.1)'
+        description: 'Version name (e.g. 2.0.0)'
         required: true
 
 defaults:
@@ -41,12 +41,12 @@ jobs:
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
-          echo "$KEYSTORE_BASE64" | base64 --decode > app/velo_release.jks
+          echo "$KEYSTORE_BASE64" | base64 --decode > app/aero_release.jks
 
       - name: Build Signed Release APK
         run: |
           ./gradlew assembleRelease \
-            -Pandroid.injected.signing.store.file=velo_release.jks \
+            -Pandroid.injected.signing.store.file=aero_release.jks \
             -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD }} \
             -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
             -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }} \
@@ -54,12 +54,12 @@ jobs:
 
       - name: Clean up keystore
         if: always()
-        run: rm -f app/velo_release.jks
+        run: rm -f app/aero_release.jks
 
       - name: Upload Signed APK
         uses: actions/upload-artifact@v4
         with:
-          name: velo-browser-release-signed
+          name: aero-browser-release-signed
           path: android-browser/app/build/outputs/apk/release/app-release.apk
           retention-days: 90
           if-no-files-found: error
@@ -69,15 +69,16 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: android-browser/app/build/outputs/apk/release/app-release.apk
-          name: Velo Browser ${{ github.ref_name }}
+          name: Aero Browser ${{ github.ref_name }}
           body: |
-            ## Velo Browser ${{ github.ref_name }} — Production Release
+            ## Aero Browser ${{ github.ref_name }} — Production Release
 
             ### Features
-            - Multi-tab browsing with isolated WebView per tab (instant switching)
-            - Multi-profile browsing with isolated cookie sessions
+            - TRUE multi-process isolated tabs (up to 4) — separate cookies, localStorage, session & cache per tab
+            - Tabs always active in background — JS timers never suspended
+            - Normal + Incognito + Isolated tab modes
             - Built-in ad blocker (EasyList-based)
-            - Chrome-style tab switcher with incognito/normal grouping
+            - Chrome-style tab switcher with three sections (Normal / Incognito / Isolated)
             - Full settings system: JavaScript, Images, Desktop Mode, Dark Mode, Ad Blocker, Safe Browsing, Search Engine, Homepage, Language
             - English & French language support
             - Download manager with notifications

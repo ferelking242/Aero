@@ -8,5 +8,7 @@ data class BrowserTab(
     val url: String = "",
     val favicon: android.graphics.Bitmap? = null,
     val isIncognito: Boolean = false,
+    val isIsolated: Boolean = false,
+    val isolatedSlot: Int = 0,
     val profileId: Long = 1L
 )
