@@ -1,21 +1,23 @@
 package com.velobrowser.ui.tabs
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.activityViewModels
 import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
-import com.google.android.material.tabs.TabLayout
+import com.google.android.material.tabs.TabLayoutMediator
 import com.velobrowser.R
 import com.velobrowser.databinding.BottomSheetTabsBinding
 import com.velobrowser.domain.model.BrowserTab
 import com.velobrowser.ui.browser.BrowserViewModel
+import com.velobrowser.ui.isolated.IsolatedBrowserActivity
 import com.velobrowser.utils.collectFlow
-import com.velobrowser.utils.gone
 import com.velobrowser.utils.toast
-import com.velobrowser.utils.visible
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -33,9 +35,7 @@ class TabsBottomSheet : BottomSheetDialogFragment() {
     private var _binding: BottomSheetTabsBinding? = null
     private val binding get() = _binding!!
     private val viewModel: BrowserViewModel by activityViewModels()
-    private lateinit var adapter: TabsAdapter
-
-    private var currentSection = TAB_POS_NORMAL
+    private lateinit var pagerAdapter: TabsPagerAdapter
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = BottomSheetTabsBinding.inflate(inflater, container, false)
@@ -45,118 +45,77 @@ class TabsBottomSheet : BottomSheetDialogFragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        adapter = TabsAdapter(
-            activeTabId = { viewModel.activeTabId.value },
-            onTabClicked = { tab ->
-                if (tab.isIsolated) {
-                    val intent = com.velobrowser.ui.isolated.IsolatedBrowserActivity.createIntent(
-                        requireContext(), tab.isolatedSlot, tab.url
-                    )
-                    startActivity(intent)
-                    dismissAllowingStateLoss()
-                } else {
-                    viewModel.switchToTab(tab.id)
-                    dismissAllowingStateLoss()
-                }
-            },
-            onTabClosed = { tab ->
-                viewModel.closeTab(tab.id)
-                val remainingInSection = getTabsForSection(currentSection, viewModel.tabs.value)
-                if (remainingInSection.isEmpty()) {
-                    if (currentSection != TAB_POS_NORMAL) {
-                        currentSection = TAB_POS_NORMAL
-                        binding.tabTypeSelector.getTabAt(TAB_POS_NORMAL)?.select()
-                    } else {
-                        dismissAllowingStateLoss()
-                    }
-                }
-            }
-        )
-
-        binding.recyclerTabs.layoutManager = GridLayoutManager(requireContext(), 2)
-        binding.recyclerTabs.adapter = adapter
-
-        setupTabSelector()
-
-        binding.btnNewTab.setOnClickListener {
-            viewModel.openNewTab()
-            dismissAllowingStateLoss()
-        }
-
-        binding.btnNewIncognito.setOnClickListener {
-            viewModel.openNewTab(incognito = true)
-            dismissAllowingStateLoss()
-        }
-
-        binding.btnNewIsolated.setOnClickListener {
-            if (viewModel.canOpenIsolatedTab()) {
-                viewModel.openIsolatedTab()
-                dismissAllowingStateLoss()
-            } else {
-                toast(getString(R.string.max_isolated_tabs_reached))
-            }
-        }
-
-        binding.btnCloseAllTabs.setOnClickListener {
-            val toClose = getTabsForSection(currentSection, viewModel.tabs.value)
-            toClose.forEach { viewModel.closeTab(it.id) }
-            if (currentSection != TAB_POS_NORMAL) {
-                currentSection = TAB_POS_NORMAL
-                binding.tabTypeSelector.getTabAt(TAB_POS_NORMAL)?.select()
-            } else {
-                dismissAllowingStateLoss()
-            }
-        }
+        setupPager()
+        setupButtons()
 
         collectFlow(viewModel.tabs) { tabs ->
-            updateTabList(tabs)
-            updateTabSelector(tabs)
+            pagerAdapter.submitSection(TAB_POS_NORMAL, tabs.filter { !it.isIncognito && !it.isIsolated })
+            pagerAdapter.submitSection(TAB_POS_INCOGNITO, tabs.filter { it.isIncognito })
+            pagerAdapter.submitSection(TAB_POS_ISOLATED, tabs.filter { it.isIsolated })
+            updateSectionLabels(tabs)
+            updateHeader(tabs)
         }
     }
 
-    private fun setupTabSelector() {
-        binding.tabTypeSelector.addTab(
-            binding.tabTypeSelector.newTab().setText(getString(R.string.tabs))
-        )
-        binding.tabTypeSelector.addTab(
-            binding.tabTypeSelector.newTab().setText(getString(R.string.incognito))
-        )
-        binding.tabTypeSelector.addTab(
-            binding.tabTypeSelector.newTab().setText(getString(R.string.isolated_tabs))
-        )
+    private fun setupPager() {
+        pagerAdapter = TabsPagerAdapter()
+        binding.viewPagerTabs.adapter = pagerAdapter
+        binding.viewPagerTabs.offscreenPageLimit = 2
+
+        TabLayoutMediator(binding.tabTypeSelector, binding.viewPagerTabs) { tab, pos ->
+            tab.text = when (pos) {
+                TAB_POS_NORMAL -> getString(R.string.tabs)
+                TAB_POS_INCOGNITO -> getString(R.string.incognito)
+                TAB_POS_ISOLATED -> getString(R.string.isolated_tabs)
+                else -> ""
+            }
+        }.attach()
 
         val activeTab = viewModel.activeTab
-        when {
-            activeTab?.isIncognito == true -> {
-                currentSection = TAB_POS_INCOGNITO
-                binding.tabTypeSelector.getTabAt(TAB_POS_INCOGNITO)?.select()
-            }
-            activeTab?.isIsolated == true -> {
-                currentSection = TAB_POS_ISOLATED
-                binding.tabTypeSelector.getTabAt(TAB_POS_ISOLATED)?.select()
-            }
+        val initialPos = when {
+            activeTab?.isIsolated == true -> TAB_POS_ISOLATED
+            activeTab?.isIncognito == true -> TAB_POS_INCOGNITO
+            else -> TAB_POS_NORMAL
         }
+        binding.viewPagerTabs.setCurrentItem(initialPos, false)
 
-        binding.tabTypeSelector.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
-            override fun onTabSelected(tab: TabLayout.Tab?) {
-                currentSection = tab?.position ?: TAB_POS_NORMAL
-                updateTabList(viewModel.tabs.value)
-                updateIsolatedInfoVisibility()
+        binding.viewPagerTabs.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
+            override fun onPageSelected(position: Int) {
+                updateHeader(viewModel.tabs.value)
             }
-            override fun onTabUnselected(tab: TabLayout.Tab?) {}
-            override fun onTabReselected(tab: TabLayout.Tab?) {}
         })
     }
 
-    private fun updateIsolatedInfoVisibility() {
-        if (currentSection == TAB_POS_ISOLATED) {
-            binding.tvIsolatedInfo.visible()
-        } else {
-            binding.tvIsolatedInfo.gone()
+    private fun setupButtons() {
+        binding.btnNewTab.setOnClickListener {
+            when (binding.viewPagerTabs.currentItem) {
+                TAB_POS_INCOGNITO -> viewModel.openNewTab(incognito = true)
+                TAB_POS_ISOLATED -> {
+                    if (viewModel.canOpenIsolatedTab()) {
+                        viewModel.openIsolatedTab()
+                    } else {
+                        toast(getString(R.string.max_isolated_tabs_reached))
+                        return@setOnClickListener
+                    }
+                }
+                else -> viewModel.openNewTab()
+            }
+            dismissAllowingStateLoss()
+        }
+
+        binding.btnCloseAllTabs.setOnClickListener {
+            val section = binding.viewPagerTabs.currentItem
+            val toClose = getTabsForSection(section, viewModel.tabs.value)
+            toClose.forEach { viewModel.closeTab(it.id) }
+            if (section != TAB_POS_NORMAL) {
+                binding.viewPagerTabs.setCurrentItem(TAB_POS_NORMAL, true)
+            } else {
+                dismissAllowingStateLoss()
+            }
         }
     }
 
-    private fun updateTabSelector(tabs: List<BrowserTab>) {
+    private fun updateSectionLabels(tabs: List<BrowserTab>) {
         val normalCount = tabs.count { !it.isIncognito && !it.isIsolated }
         val incognitoCount = tabs.count { it.isIncognito }
         val isolatedCount = tabs.count { it.isIsolated }
@@ -167,8 +126,15 @@ class TabsBottomSheet : BottomSheetDialogFragment() {
             if (incognitoCount > 0) "${getString(R.string.incognito)} ($incognitoCount)" else getString(R.string.incognito)
         binding.tabTypeSelector.getTabAt(TAB_POS_ISOLATED)?.text =
             if (isolatedCount > 0) "${getString(R.string.isolated_tabs)} ($isolatedCount)" else getString(R.string.isolated_tabs)
+    }
 
-        val headerText = when (currentSection) {
+    private fun updateHeader(tabs: List<BrowserTab>) {
+        val section = binding.viewPagerTabs.currentItem
+        val normalCount = tabs.count { !it.isIncognito && !it.isIsolated }
+        val incognitoCount = tabs.count { it.isIncognito }
+        val isolatedCount = tabs.count { it.isIsolated }
+
+        val headerText = when (section) {
             TAB_POS_INCOGNITO -> "$incognitoCount ${getString(R.string.incognito_tabs_label)}"
             TAB_POS_ISOLATED -> "$isolatedCount ${getString(R.string.isolated_tabs_label)}"
             else -> "$normalCount ${getString(R.string.tab_count_label)}"
@@ -176,16 +142,66 @@ class TabsBottomSheet : BottomSheetDialogFragment() {
         binding.tvTabCountHeader.text = headerText
     }
 
-    private fun updateTabList(tabs: List<BrowserTab>) {
-        val filtered = getTabsForSection(currentSection, tabs)
-        adapter.submitList(filtered)
+    private fun getTabsForSection(section: Int, tabs: List<BrowserTab>): List<BrowserTab> = when (section) {
+        TAB_POS_INCOGNITO -> tabs.filter { it.isIncognito }
+        TAB_POS_ISOLATED -> tabs.filter { it.isIsolated }
+        else -> tabs.filter { !it.isIncognito && !it.isIsolated }
     }
 
-    private fun getTabsForSection(section: Int, tabs: List<BrowserTab>): List<BrowserTab> {
-        return when (section) {
-            TAB_POS_INCOGNITO -> tabs.filter { it.isIncognito }
-            TAB_POS_ISOLATED -> tabs.filter { it.isIsolated }
-            else -> tabs.filter { !it.isIncognito && !it.isIsolated }
+    private fun onTabClicked(tab: BrowserTab) {
+        if (tab.isIsolated) {
+            val intent = IsolatedBrowserActivity.createIntent(requireContext(), tab.isolatedSlot, tab.url)
+            intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+            startActivity(intent)
+        } else {
+            viewModel.switchToTab(tab.id)
+        }
+        dismissAllowingStateLoss()
+    }
+
+    private fun onTabClosed(tab: BrowserTab) {
+        viewModel.closeTab(tab.id)
+        val section = binding.viewPagerTabs.currentItem
+        val remaining = getTabsForSection(section, viewModel.tabs.value)
+        if (remaining.isEmpty() && section != TAB_POS_NORMAL) {
+            binding.viewPagerTabs.setCurrentItem(TAB_POS_NORMAL, true)
+        }
+    }
+
+    inner class TabsPagerAdapter : RecyclerView.Adapter<TabsPagerAdapter.PageHolder>() {
+
+        private val tabAdapters = Array(3) {
+            TabsAdapter(
+                activeTabId = { viewModel.activeTabId.value },
+                onTabClicked = ::onTabClicked,
+                onTabClosed = ::onTabClosed
+            )
+        }
+
+        fun submitSection(index: Int, tabs: List<BrowserTab>) {
+            tabAdapters[index].submitList(tabs.toList())
+        }
+
+        inner class PageHolder(val rv: RecyclerView) : RecyclerView.ViewHolder(rv)
+
+        override fun getItemCount() = 3
+
+        override fun getItemViewType(position: Int) = position
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): PageHolder {
+            val rv = RecyclerView(parent.context).apply {
+                layoutParams = ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+                layoutManager = GridLayoutManager(context, 2)
+                isNestedScrollingEnabled = false
+            }
+            return PageHolder(rv)
+        }
+
+        override fun onBindViewHolder(holder: PageHolder, position: Int) {
+            holder.rv.adapter = tabAdapters[position]
         }
     }
 

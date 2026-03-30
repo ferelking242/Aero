@@ -6,7 +6,7 @@
     android:layout_height="wrap_content"
     android:orientation="vertical">
 
-    <!-- Handle bar -->
+    <!-- Drag handle -->
     <View
         android:layout_width="40dp"
         android:layout_height="4dp"
@@ -15,14 +15,14 @@
         android:layout_marginBottom="4dp"
         android:background="@drawable/bg_bottom_sheet_handle" />
 
-    <!-- Header row: tab count + close all -->
+    <!-- Header: title + new tab icon + close all -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="48dp"
         android:orientation="horizontal"
         android:gravity="center_vertical"
         android:paddingStart="16dp"
-        android:paddingEnd="12dp">
+        android:paddingEnd="4dp">
 
         <TextView
             android:id="@+id/tvTabCountHeader"
@@ -34,6 +34,15 @@
             android:textStyle="bold"
             android:textColor="@color/color_text_primary" />
 
+        <ImageButton
+            android:id="@+id/btnNewTab"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_add"
+            android:tint="@color/color_accent"
+            android:contentDescription="@string/new_tab" />
+
         <TextView
             android:id="@+id/btnCloseAllTabs"
             android:layout_width="wrap_content"
@@ -41,19 +50,21 @@
             android:text="@string/close_all"
             android:textSize="13sp"
             android:textColor="@color/color_accent"
-            android:padding="8dp"
+            android:paddingStart="8dp"
+            android:paddingEnd="12dp"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp"
             android:background="?attr/selectableItemBackgroundBorderless" />
 
     </LinearLayout>
 
-    <!-- Tab type selector: Tabs | Incognito | Isolated -->
+    <!-- Section selector: Onglets | Privé | Isolés -->
     <com.google.android.material.tabs.TabLayout
         android:id="@+id/tabTypeSelector"
         android:layout_width="match_parent"
         android:layout_height="44dp"
-        android:layout_marginStart="16dp"
-        android:layout_marginEnd="16dp"
-        android:layout_marginBottom="4dp"
+        android:layout_marginStart="8dp"
+        android:layout_marginEnd="8dp"
         app:tabMode="fixed"
         app:tabGravity="fill"
         app:tabBackground="@android:color/transparent"
@@ -63,72 +74,10 @@
         app:tabIndicatorHeight="2dp"
         style="@style/Widget.Material3.TabLayout" />
 
-    <!-- Tabs grid -->
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/recyclerTabs"
+    <!-- Swipeable tab pages -->
+    <androidx.viewpager2.widget.ViewPager2
+        android:id="@+id/viewPagerTabs"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:paddingStart="8dp"
-        android:paddingEnd="8dp"
-        android:paddingBottom="8dp"
-        android:clipToPadding="false" />
-
-    <!-- Isolated info banner (shown only on Isolated tab) -->
-    <TextView
-        android:id="@+id/tvIsolatedInfo"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:visibility="gone"
-        android:text="@string/isolated_tab_info"
-        android:textSize="12sp"
-        android:textColor="@color/color_text_secondary"
-        android:background="@color/color_isolated_preview_bg"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp"
-        android:paddingTop="10dp"
-        android:paddingBottom="10dp" />
-
-    <!-- Bottom action bar -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="56dp"
-        android:orientation="horizontal"
-        android:gravity="center"
-        android:background="@color/color_toolbar"
-        android:elevation="2dp">
-
-        <Button
-            android:id="@+id/btnNewIncognito"
-            android:layout_width="0dp"
-            android:layout_weight="1"
-            android:layout_height="40dp"
-            android:layout_marginStart="8dp"
-            android:layout_marginEnd="4dp"
-            style="@style/Widget.Material3.Button.OutlinedButton"
-            android:text="@string/incognito"
-            android:textSize="12sp" />
-
-        <Button
-            android:id="@+id/btnNewTab"
-            android:layout_width="0dp"
-            android:layout_weight="1"
-            android:layout_height="40dp"
-            android:layout_marginStart="4dp"
-            android:layout_marginEnd="4dp"
-            android:text="@string/new_tab"
-            android:textSize="12sp" />
-
-        <Button
-            android:id="@+id/btnNewIsolated"
-            android:layout_width="0dp"
-            android:layout_weight="1"
-            android:layout_height="40dp"
-            android:layout_marginStart="4dp"
-            android:layout_marginEnd="8dp"
-            style="@style/Widget.Material3.Button.OutlinedButton"
-            android:text="@string/isolated_tab"
-            android:textSize="12sp" />
-
-    </LinearLayout>
+        android:layout_height="340dp" />
 
 </LinearLayout>
