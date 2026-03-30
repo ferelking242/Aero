@@ -54,7 +54,6 @@ class TDLibClient @Inject constructor(
         if (client != null) return
         pendingApiId = apiId
         pendingApiHash = apiHash
-        Client.setLogVerbosityLevel(1)
         client = Client.create(
             { update -> handleUpdate(update) },
             null,
@@ -154,7 +153,7 @@ class TDLibClient @Inject constructor(
     suspend fun getFile(fileId: Int): TdApi.File = send(TdApi.GetFile(fileId))
 
     fun close() {
-        client?.close()
+        runCatching { client?.send(TdApi.Close(), emptyHandler) }
         client = null
         _authState.value = null
     }
