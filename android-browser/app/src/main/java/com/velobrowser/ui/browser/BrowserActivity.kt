@@ -14,6 +14,7 @@ import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import androidx.core.view.isVisible
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.velobrowser.R
 import com.velobrowser.core.adblocker.AdBlocker
 import com.velobrowser.core.browser.*
@@ -22,10 +23,8 @@ import com.velobrowser.core.isolated.IsolatedTabManager
 import com.velobrowser.core.isolated.IsolatedTabReceiver
 import com.velobrowser.databinding.ActivityBrowserBinding
 import com.velobrowser.domain.model.BrowserTab
-import com.velobrowser.ui.downloads.DownloadsActivity
 import com.velobrowser.ui.isolated.IsolatedBrowserActivity
-import com.velobrowser.ui.profiles.ProfileManagerActivity
-import com.velobrowser.ui.settings.SettingsActivity
+import com.velobrowser.ui.menu.MenuBottomSheet
 import com.velobrowser.ui.tabs.TabsBottomSheet
 import com.velobrowser.utils.*
 import dagger.hilt.android.AndroidEntryPoint
@@ -190,8 +189,12 @@ class BrowserActivity : AppCompatActivity() {
         binding.btnSecureIndicator.setImageResource(
             if (UrlUtils.isHttps(url)) R.drawable.ic_lock else R.drawable.ic_lock_open
         )
-        binding.btnBack.isEnabled = activeWebView?.canGoBack() == true
-        binding.btnForward.isEnabled = activeWebView?.canGoForward() == true
+        val canGoBack = activeWebView?.canGoBack() == true
+        val canGoForward = activeWebView?.canGoForward() == true
+        binding.btnBack.isEnabled = canGoBack
+        binding.btnBack.alpha = if (canGoBack) 1f else 0.35f
+        binding.btnForward.isEnabled = canGoForward
+        binding.btnForward.alpha = if (canGoForward) 1f else 0.35f
     }
 
     private fun setupUrlBar() {
@@ -254,11 +257,43 @@ class BrowserActivity : AppCompatActivity() {
 
     private fun setupBottomBar() {
         binding.btnTabs.setOnClickListener { viewModel.showTabs() }
+
         binding.btnHome.setOnClickListener {
             viewModel.navigateTo(viewModel.settings.value.homepage)
         }
-        binding.btnBookmark.setOnClickListener { viewModel.toggleBookmark() }
-        binding.btnMenu.setOnClickListener { showMenuOptions() }
+
+        binding.btnHome.setOnLongClickListener {
+            showIsolatedTabsPicker()
+            true
+        }
+
+        binding.btnMenu.setOnClickListener {
+            MenuBottomSheet.newInstance().show(supportFragmentManager, MenuBottomSheet.TAG)
+        }
+    }
+
+    private fun showIsolatedTabsPicker() {
+        val isolated = viewModel.tabs.value.filter { it.isIsolated }
+        if (isolated.isEmpty()) {
+            toast(getString(R.string.no_isolated_tabs))
+            return
+        }
+        val items = isolated.map { tab ->
+            val title = tab.title.ifBlank {
+                tab.url.ifBlank { getString(R.string.isolated_tab_slot, tab.isolatedSlot) }
+            }
+            "Slot ${tab.isolatedSlot}  ·  $title"
+        }.toTypedArray()
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle(getString(R.string.isolated_tabs))
+            .setItems(items) { _, idx ->
+                val tab = isolated[idx]
+                val intent = IsolatedBrowserActivity.createIntent(this, tab.isolatedSlot, tab.url)
+                intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                startActivity(intent)
+            }
+            .show()
     }
 
     private fun observeViewModel() {
@@ -319,14 +354,12 @@ class BrowserActivity : AppCompatActivity() {
             binding.btnSecureIndicator.setImageResource(
                 if (UrlUtils.isHttps(url)) R.drawable.ic_lock else R.drawable.ic_lock_open
             )
-            binding.btnBack.isEnabled = activeWebView?.canGoBack() == true
-            binding.btnForward.isEnabled = activeWebView?.canGoForward() == true
-        }
-
-        collectFlow(viewModel.isBookmarked) { bookmarked ->
-            binding.btnBookmark.setImageResource(
-                if (bookmarked) R.drawable.ic_bookmark_filled else R.drawable.ic_bookmark
-            )
+            val canGoBack = activeWebView?.canGoBack() == true
+            val canGoForward = activeWebView?.canGoForward() == true
+            binding.btnBack.isEnabled = canGoBack
+            binding.btnBack.alpha = if (canGoBack) 1f else 0.35f
+            binding.btnForward.isEnabled = canGoForward
+            binding.btnForward.alpha = if (canGoForward) 1f else 0.35f
         }
 
         collectFlow(viewModel.tabs) { tabs ->
@@ -353,65 +386,6 @@ class BrowserActivity : AppCompatActivity() {
     private fun showTabsSheet() {
         val sheet = TabsBottomSheet.newInstance()
         sheet.show(supportFragmentManager, TabsBottomSheet.TAG)
-    }
-
-    private fun showMenuOptions() {
-        val popup = androidx.appcompat.widget.PopupMenu(this, binding.btnMenu)
-        popup.menuInflater.inflate(R.menu.browser_menu, popup.menu)
-
-        val canOpenIsolated = viewModel.canOpenIsolatedTab()
-        popup.menu.findItem(R.id.menu_new_isolated)?.isEnabled = canOpenIsolated
-        popup.menu.findItem(R.id.menu_open_isolated)?.isEnabled = canOpenIsolated
-
-        popup.setOnMenuItemClickListener { item ->
-            when (item.itemId) {
-                R.id.menu_new_tab -> { viewModel.openNewTab(); true }
-                R.id.menu_new_incognito -> { viewModel.openNewTab(incognito = true); true }
-                R.id.menu_new_isolated -> {
-                    if (canOpenIsolated) {
-                        viewModel.openIsolatedTab()
-                    } else {
-                        toast(getString(R.string.max_isolated_tabs_reached))
-                    }
-                    true
-                }
-                R.id.menu_open_isolated -> {
-                    if (canOpenIsolated) {
-                        viewModel.openCurrentUrlInIsolatedTab()
-                    } else {
-                        toast(getString(R.string.max_isolated_tabs_reached))
-                    }
-                    true
-                }
-                R.id.menu_settings -> { startActivity(Intent(this, SettingsActivity::class.java)); true }
-                R.id.menu_profiles -> { startActivity(Intent(this, ProfileManagerActivity::class.java)); true }
-                R.id.menu_downloads -> { startActivity(Intent(this, DownloadsActivity::class.java)); true }
-                R.id.menu_history -> {
-                    HistoryBottomSheet.newInstance().show(supportFragmentManager, HistoryBottomSheet.TAG)
-                    true
-                }
-                R.id.menu_bookmarks -> {
-                    BookmarksBottomSheet.newInstance().show(supportFragmentManager, BookmarksBottomSheet.TAG)
-                    true
-                }
-                R.id.menu_share -> {
-                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                        type = "text/plain"
-                        putExtra(Intent.EXTRA_TEXT, viewModel.currentUrl.value)
-                    }
-                    startActivity(Intent.createChooser(shareIntent, getString(R.string.share)))
-                    true
-                }
-                R.id.menu_desktop_mode -> {
-                    val newValue = !viewModel.settings.value.desktopMode
-                    viewModel.setDesktopMode(newValue)
-                    activeWebView?.reload()
-                    true
-                }
-                else -> false
-            }
-        }
-        popup.show()
     }
 
     private fun showFullscreen(view: View, callback: WebChromeClient.CustomViewCallback) {
@@ -464,13 +438,11 @@ class BrowserActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
-        // Only flush cookies — do NOT call webView.onPause() to keep JS timers alive
         CookieManager.getInstance().flush()
     }
 
     override fun onResume() {
         super.onResume()
-        // Resume all WebView rendering and timers
         webViews.values.forEach { wv ->
             wv.onResume()
             wv.resumeTimers()
@@ -479,7 +451,6 @@ class BrowserActivity : AppCompatActivity() {
 
     override fun onStop() {
         super.onStop()
-        // Intentionally do NOT pause WebViews — keep background execution alive
     }
 
     override fun onDestroy() {

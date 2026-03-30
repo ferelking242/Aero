@@ -1,0 +1,322 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@color/color_toolbar">
+
+    <!-- Drag handle -->
+    <View
+        android:layout_width="40dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="8dp"
+        android:background="@drawable/bg_bottom_sheet_handle" />
+
+    <!-- Row 1: Night Mode | Bookmarks | History | Downloads | Incognito -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingStart="4dp"
+        android:paddingEnd="4dp">
+
+        <LinearLayout
+            android:id="@+id/itemNightMode"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="76dp"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="?attr/selectableItemBackground">
+            <ImageView
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:src="@drawable/ic_night_mode"
+                android:tint="@color/color_icon" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/menu_dark_mode"
+                android:textSize="10.5sp"
+                android:textColor="@color/color_text_primary"
+                android:gravity="center"
+                android:maxLines="2"
+                android:layout_marginTop="5dp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/itemBookmarks"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="76dp"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="?attr/selectableItemBackground">
+            <ImageView
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:src="@drawable/ic_bookmark"
+                android:tint="@color/color_icon" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/bookmarks"
+                android:textSize="10.5sp"
+                android:textColor="@color/color_text_primary"
+                android:gravity="center"
+                android:maxLines="2"
+                android:layout_marginTop="5dp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/itemHistory"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="76dp"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="?attr/selectableItemBackground">
+            <ImageView
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:src="@drawable/ic_history"
+                android:tint="@color/color_icon" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/history"
+                android:textSize="10.5sp"
+                android:textColor="@color/color_text_primary"
+                android:gravity="center"
+                android:maxLines="2"
+                android:layout_marginTop="5dp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/itemDownloads"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="76dp"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="?attr/selectableItemBackground">
+            <ImageView
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:src="@drawable/ic_download"
+                android:tint="@color/color_icon" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/downloads"
+                android:textSize="10.5sp"
+                android:textColor="@color/color_text_primary"
+                android:gravity="center"
+                android:maxLines="2"
+                android:layout_marginTop="5dp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/itemIncognito"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="76dp"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="?attr/selectableItemBackground">
+            <ImageView
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:src="@drawable/ic_incognito"
+                android:tint="@color/color_icon" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/menu_incognito_label"
+                android:textSize="10.5sp"
+                android:textColor="@color/color_text_primary"
+                android:gravity="center"
+                android:maxLines="2"
+                android:layout_marginTop="5dp" />
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <!-- Row 2: Share | Add Bookmark | Desktop Mode | Profiles | Settings -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingStart="4dp"
+        android:paddingEnd="4dp"
+        android:paddingBottom="4dp">
+
+        <LinearLayout
+            android:id="@+id/itemShare"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="76dp"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="?attr/selectableItemBackground">
+            <ImageView
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:src="@drawable/ic_share"
+                android:tint="@color/color_icon" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/share"
+                android:textSize="10.5sp"
+                android:textColor="@color/color_text_primary"
+                android:gravity="center"
+                android:maxLines="2"
+                android:layout_marginTop="5dp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/itemAddBookmark"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="76dp"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="?attr/selectableItemBackground">
+            <ImageView
+                android:id="@+id/ivBookmarkIcon"
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:src="@drawable/ic_bookmark"
+                android:tint="@color/color_icon" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/menu_add_bookmark"
+                android:textSize="10.5sp"
+                android:textColor="@color/color_text_primary"
+                android:gravity="center"
+                android:maxLines="2"
+                android:layout_marginTop="5dp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/itemDesktop"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="76dp"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="?attr/selectableItemBackground">
+            <ImageView
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:src="@drawable/ic_desktop"
+                android:tint="@color/color_icon" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/desktop_mode"
+                android:textSize="10.5sp"
+                android:textColor="@color/color_text_primary"
+                android:gravity="center"
+                android:maxLines="2"
+                android:layout_marginTop="5dp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/itemTools"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="76dp"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="?attr/selectableItemBackground">
+            <ImageView
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:src="@drawable/ic_tools"
+                android:tint="@color/color_icon" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/menu_tools_label"
+                android:textSize="10.5sp"
+                android:textColor="@color/color_text_primary"
+                android:gravity="center"
+                android:maxLines="2"
+                android:layout_marginTop="5dp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/itemSettings"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="76dp"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="?attr/selectableItemBackground">
+            <ImageView
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:src="@drawable/ic_settings"
+                android:tint="@color/color_icon" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/settings"
+                android:textSize="10.5sp"
+                android:textColor="@color/color_text_primary"
+                android:gravity="center"
+                android:maxLines="2"
+                android:layout_marginTop="5dp" />
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <!-- Divider -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/color_divider"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp" />
+
+    <!-- Bottom row: power (close app) + dismiss -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp">
+
+        <ImageButton
+            android:id="@+id/btnExit"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_power"
+            android:tint="@color/color_icon_secondary"
+            android:contentDescription="@string/menu_exit" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="1dp" />
+
+        <ImageButton
+            android:id="@+id/btnDismissMenu"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_chevron_down"
+            android:tint="@color/color_icon_secondary"
+            android:contentDescription="@string/cancel" />
+
+    </LinearLayout>
+
+</LinearLayout>
