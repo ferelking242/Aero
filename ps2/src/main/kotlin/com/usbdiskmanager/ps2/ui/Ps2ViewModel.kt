@@ -19,9 +19,10 @@ import com.usbdiskmanager.ps2.domain.model.Ps2Download
 import com.usbdiskmanager.ps2.domain.model.Ps2Game
 import com.usbdiskmanager.ps2.domain.model.UsbGame
 import com.usbdiskmanager.ps2.domain.repository.Ps2Repository
+import com.usbdiskmanager.ps2.data.download.TelegramDownloadManager
+import com.usbdiskmanager.ps2.data.download.TgDownloadProgress
 import com.usbdiskmanager.ps2.telegram.TelegramChannelConfig
 import com.usbdiskmanager.ps2.telegram.TelegramChannelService
-import com.usbdiskmanager.ps2.telegram.TelegramDownloadProgress
 import com.usbdiskmanager.ps2.telegram.TelegramGamePost
 import com.usbdiskmanager.ps2.telegram.TelegramSetupState
 import com.usbdiskmanager.ps2.ui.transfer.UsbTransferUiState
@@ -104,12 +105,13 @@ enum class Ps2Tab { GAMES, MERGE_CFG, UL_MANAGER, DOWNLOAD, TRANSFER, TELEGRAM }
 
 data class TelegramUiState(
     val isConfigured: Boolean = false,
+    val setupState: TelegramSetupState = TelegramSetupState.NotConfigured,
     val channels: List<TelegramChannelConfig> = emptyList(),
     val selectedChannel: String? = null,
     val allPosts: List<TelegramGamePost> = emptyList(),
     val isLoading: Boolean = false,
     val error: String? = null,
-    val downloads: Map<String, TelegramDownloadProgress> = emptyMap()
+    val downloads: Map<String, TgDownloadProgress> = emptyMap()
 )
 
 @HiltViewModel
@@ -122,7 +124,8 @@ class Ps2ViewModel @Inject constructor(
     private val searchService: IsoSearchService,
     private val ulCfgManager: UlCfgManager,
     private val isoScanner: IsoScanner,
-    private val telegramService: TelegramChannelService
+    private val telegramService: TelegramChannelService,
+    private val telegramDownloadManager: TelegramDownloadManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(Ps2UiState())
@@ -149,6 +152,35 @@ class Ps2ViewModel @Inject constructor(
             scan()
             scanPhone()
         }
+
+        // Initialize TDLib if credentials already saved
+        telegramService.initializeTDLib()
+
+        // Observe TDLib auth state → update UI
+        telegramService.tdlibAuthState.onEach { _ ->
+            val setupState = telegramService.getSetupState()
+            val isReady = setupState is TelegramSetupState.Ready
+            _uiState.update { s ->
+                s.copy(
+                    telegramState = s.telegramState.copy(
+                        setupState = setupState,
+                        isConfigured = isReady
+                    )
+                )
+            }
+            if (isReady && _uiState.value.telegramState.allPosts.isEmpty()) {
+                refreshTelegramPosts()
+            }
+        }.launchIn(viewModelScope)
+
+        // Observe download progress from TDLib
+        telegramDownloadManager.downloads.onEach { progressMap ->
+            _uiState.update { s ->
+                s.copy(telegramState = s.telegramState.copy(downloads = progressMap))
+            }
+            // Auto-scan when a download completes
+            progressMap.values.filter { it.isDone }.forEach { _ -> scan() }
+        }.launchIn(viewModelScope)
     }
 
     // ── Scanning ────────────────────────────────────────────────────────────
@@ -766,53 +798,65 @@ class Ps2ViewModel @Inject constructor(
     fun setTab(tab: Ps2Tab) {
         _uiState.update { it.copy(selectedTab = tab) }
         if (tab == Ps2Tab.TRANSFER) refreshTransferGames()
-        if (tab == Ps2Tab.TELEGRAM) loadTelegramState()
+        if (tab == Ps2Tab.TELEGRAM && _uiState.value.telegramState.isConfigured && _uiState.value.telegramState.allPosts.isEmpty()) refreshTelegramPosts()
     }
     fun clearError() = _uiState.update { it.copy(errorMessage = null) }
 
     // ── Telegram ─────────────────────────────────────────────────────────────
 
-    private fun loadTelegramState() {
-        val state = telegramService.getSetupState()
+    fun saveTelegramCredentials(apiId: Int, apiHash: String) {
+        telegramService.saveCredentials(apiId, apiHash)
         val channels = telegramService.getSavedChannels()
-        val isConfigured = state is TelegramSetupState.Ready
         _uiState.update { s ->
             s.copy(telegramState = s.telegramState.copy(
-                isConfigured = isConfigured,
-                channels = channels
+                setupState = TelegramSetupState.WaitingPhoneNumber,
+                channels = channels,
+                error = null
             ))
-        }
-        if (isConfigured && _uiState.value.telegramState.allPosts.isEmpty()) {
-            refreshTelegramPosts()
         }
     }
 
-    fun setupTelegram(sessionString: String, apiHash: String, onError: (String) -> Unit) {
+    fun sendTelegramPhone(phone: String, onError: (String) -> Unit) {
         viewModelScope.launch {
-            val result = telegramService.saveSetup(sessionString, apiHash)
-            result.fold(
+            telegramService.sendPhone(phone).fold(
                 onSuccess = {
-                    val channels = telegramService.getSavedChannels()
                     _uiState.update { s ->
                         s.copy(telegramState = s.telegramState.copy(
-                            isConfigured = true,
-                            channels = channels,
+                            setupState = TelegramSetupState.WaitingCode(phone),
                             error = null
                         ))
                     }
-                    refreshTelegramPosts()
                 },
-                onFailure = { e ->
-                    onError(e.message ?: "Session string invalide")
-                }
+                onFailure = { e -> onError(e.message ?: "Erreur envoi téléphone") }
+            )
+        }
+    }
+
+    fun sendTelegramCode(code: String, onError: (String) -> Unit) {
+        viewModelScope.launch {
+            telegramService.sendCode(code).fold(
+                onSuccess = { /* auth state update handled by tdlibAuthState observer */ },
+                onFailure = { e -> onError(e.message ?: "Code invalide") }
+            )
+        }
+    }
+
+    fun sendTelegramPassword(password: String, onError: (String) -> Unit) {
+        viewModelScope.launch {
+            telegramService.sendPassword(password).fold(
+                onSuccess = { /* auth state update handled by tdlibAuthState observer */ },
+                onFailure = { e -> onError(e.message ?: "Mot de passe invalide") }
             )
         }
     }
 
     fun disconnectTelegram() {
-        telegramService.clearSetup()
-        _uiState.update { s ->
-            s.copy(telegramState = TelegramUiState(isConfigured = false))
+        viewModelScope.launch {
+            telegramService.logOut()
+            telegramService.clearSetup()
+            _uiState.update { s ->
+                s.copy(telegramState = TelegramUiState(isConfigured = false))
+            }
         }
     }
 
@@ -898,23 +942,11 @@ class Ps2ViewModel @Inject constructor(
     }
 
     fun downloadTelegramGame(post: TelegramGamePost) {
-        val key = post.messageId.toString()
-        if (_uiState.value.telegramState.downloads[key]?.run { !isDone && error == null } == true) return
-        val outDir = File(IsoScanner.BASE_DIR).also { it.mkdirs() }
-        viewModelScope.launch {
-            telegramService.downloadDocument(post, outDir)
-                .collect { progress ->
-                    _uiState.update { s ->
-                        s.copy(telegramState = s.telegramState.copy(
-                            downloads = s.telegramState.downloads + (key to progress)
-                        ))
-                    }
-                    if (progress.isDone) {
-                        Timber.d("Download complete: ${post.fileName}")
-                        scan()
-                    }
-                }
-        }
+        telegramDownloadManager.enqueue(post)
+    }
+
+    fun cancelTelegramDownload(id: String) {
+        telegramDownloadManager.cancel(id)
     }
 
     fun clearTelegramError() {

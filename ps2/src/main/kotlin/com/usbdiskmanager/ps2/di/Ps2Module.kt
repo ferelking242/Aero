@@ -6,6 +6,7 @@ import com.usbdiskmanager.ps2.data.converter.UlCfgManager
 import com.usbdiskmanager.ps2.data.cover.CoverArtFetcher
 import com.usbdiskmanager.ps2.data.db.ConversionJobDao
 import com.usbdiskmanager.ps2.data.db.Ps2Database
+import com.usbdiskmanager.ps2.data.download.TelegramDownloadDao
 import com.usbdiskmanager.ps2.data.scanner.IsoScanner
 import com.usbdiskmanager.ps2.domain.repository.Ps2Repository
 import com.usbdiskmanager.ps2.engine.IsoEngine
@@ -46,5 +47,10 @@ abstract class Ps2Module {
         @Singleton
         fun provideConversionJobDao(db: Ps2Database): ConversionJobDao =
             db.conversionJobDao()
+
+        @Provides
+        @Singleton
+        fun provideTelegramDownloadDao(db: Ps2Database): TelegramDownloadDao =
+            db.telegramDownloadDao()
     }
 }

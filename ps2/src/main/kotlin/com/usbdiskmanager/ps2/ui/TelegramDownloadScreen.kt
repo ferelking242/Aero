@@ -1,9 +1,9 @@
 package com.usbdiskmanager.ps2.ui
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -19,21 +19,26 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.usbdiskmanager.ps2.data.download.TelegramDownloadManager
+import com.usbdiskmanager.ps2.data.download.TgDownloadProgress
+import com.usbdiskmanager.ps2.data.download.TgDownloadStatus
 import com.usbdiskmanager.ps2.telegram.TelegramChannelConfig
 import com.usbdiskmanager.ps2.telegram.TelegramGamePost
+import com.usbdiskmanager.ps2.telegram.TelegramSetupState
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Root screen — routes based on auth state
+// ──────────────────────────────────────────────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -41,25 +46,33 @@ fun TelegramDownloadScreen(viewModel: Ps2ViewModel) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val tgState = uiState.telegramState
 
-    when {
-        !tgState.isConfigured -> TelegramSetupScreen(viewModel)
-        else                  -> TelegramBrowserScreen(viewModel, tgState)
+    AnimatedContent(targetState = tgState.setupState, label = "tg_auth") { state ->
+        when (state) {
+            is TelegramSetupState.NotConfigured ->
+                TelegramCredentialsScreen(viewModel)
+            is TelegramSetupState.WaitingPhoneNumber ->
+                TelegramPhoneScreen(viewModel)
+            is TelegramSetupState.WaitingCode ->
+                TelegramCodeScreen(viewModel, state.phoneNumber)
+            is TelegramSetupState.WaitingPassword ->
+                TelegramPasswordScreen(viewModel)
+            is TelegramSetupState.Ready ->
+                TelegramBrowserScreen(viewModel, tgState)
+            is TelegramSetupState.Error ->
+                TelegramErrorScreen(state.message) { viewModel.disconnectTelegram() }
+        }
     }
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Setup Screen
+// Step 1 — Credentials (api_id + api_hash)
 // ──────────────────────────────────────────────────────────────────────────────
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TelegramSetupScreen(viewModel: Ps2ViewModel) {
-    var sessionString by remember { mutableStateOf("") }
+private fun TelegramCredentialsScreen(viewModel: Ps2ViewModel) {
+    var apiIdText by remember { mutableStateOf("") }
     var apiHash by remember { mutableStateOf("") }
-    var showSession by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    var showGuide by remember { mutableStateOf(false) }
-    val clipboard = LocalClipboardManager.current
     val uriHandler = LocalUriHandler.current
 
     LazyColumn(
@@ -67,150 +80,44 @@ private fun TelegramSetupScreen(viewModel: Ps2ViewModel) {
         verticalArrangement = Arrangement.spacedBy(14.dp),
         modifier = Modifier.fillMaxSize()
     ) {
-        item {
-            // Header
-            Surface(
-                color = Color(0xFF1A237E).copy(alpha = 0.15f),
-                shape = RoundedCornerShape(14.dp)
-            ) {
-                Row(
-                    modifier = Modifier.padding(14.dp).fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .background(Color(0xFF0088CC), RoundedCornerShape(12.dp)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Default.Send, null, tint = Color.White, modifier = Modifier.size(24.dp))
-                    }
-                    Column {
-                        Text("Telegram — Jeux PS2", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            "Téléchargez des ISOs PS2 depuis des canaux Telegram. Une session est requise.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-        }
+        item { TelegramHeader("Connexion Telegram", "Entrez vos identifiants API pour activer les téléchargements TDLib.") }
 
-        // Guide card
         item {
-            Card(
-                onClick = { showGuide = !showGuide },
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
-            ) {
-                Column(modifier = Modifier.padding(12.dp).animateContentSize()) {
-                    Row(
+            Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(12.dp)) {
+                Column(modifier = Modifier.padding(14.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Comment obtenir api_id & api_hash ?", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleSmall)
+                    StepItem("1", "Allez sur my.telegram.org")
+                    StepItem("2", "Connectez-vous avec votre numéro de téléphone")
+                    StepItem("3", "Cliquez sur « API development tools »")
+                    StepItem("4", "Créez une app (nom libre) → copiez api_id & api_hash")
+                    OutlinedButton(
+                        onClick = { uriHandler.openUri("https://my.telegram.org/apps") },
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        shape = RoundedCornerShape(10.dp)
                     ) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.HelpOutline, null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(18.dp))
-                            Text("Comment obtenir les credentials ?", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
-                        }
-                        Icon(
-                            if (showGuide) Icons.Default.ExpandLess else Icons.Default.ExpandMore, null,
-                            tint = MaterialTheme.colorScheme.onSecondaryContainer
-                        )
-                    }
-                    AnimatedVisibility(showGuide) {
-                        Column(
-                            modifier = Modifier.padding(top = 10.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            StepCard("1", "Obtenez api_id & api_hash",
-                                "Allez sur my.telegram.org → API development tools → créez une app. Copiez l'api_id et l'api_hash.")
-                            StepCard("2", "Générez une Session String",
-                                "Installez Python + Pyrogram :\npip install pyrogram\n\nPuis exécutez ce script :")
-                            // Script code block
-                            Surface(
-                                color = Color(0xFF1E1E1E),
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Column(modifier = Modifier.padding(10.dp)) {
-                                    val code = """from pyrogram import Client
-app = Client(
-  "my_session",
-  api_id=VOTRE_API_ID,
-  api_hash="VOTRE_API_HASH"
-)
-with app:
-  print(app.export_session_string())"""
-                                    Text(code, fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = Color(0xFF4FC3F7))
-                                    Spacer(Modifier.height(6.dp))
-                                    OutlinedButton(
-                                        onClick = { clipboard.setText(AnnotatedString(code)) },
-                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                                    ) {
-                                        Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(14.dp))
-                                        Spacer(Modifier.width(4.dp))
-                                        Text("Copier", style = MaterialTheme.typography.labelSmall)
-                                    }
-                                }
-                            }
-                            StepCard("3", "Collez les infos ci-dessous",
-                                "Collez la session string générée et votre api_hash, puis appuyez sur Valider.")
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                OutlinedButton(
-                                    onClick = { uriHandler.openUri("https://my.telegram.org/apps") },
-                                    modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(10.dp)
-                                ) {
-                                    Icon(Icons.Default.OpenInBrowser, null, modifier = Modifier.size(16.dp))
-                                    Spacer(Modifier.width(6.dp))
-                                    Text("my.telegram.org", style = MaterialTheme.typography.labelSmall)
-                                }
-                            }
-                        }
+                        Icon(Icons.Default.OpenInBrowser, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Ouvrir my.telegram.org")
                     }
                 }
             }
         }
 
-        // Session string input
         item {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Session String", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                Text("api_id", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
                 OutlinedTextField(
-                    value = sessionString,
-                    onValueChange = { sessionString = it; error = null },
+                    value = apiIdText,
+                    onValueChange = { apiIdText = it; error = null },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Coller la session string Pyrogram ici") },
-                    visualTransformation = if (showSession) VisualTransformation.None else PasswordVisualTransformation(),
-                    trailingIcon = {
-                        Row {
-                            IconButton(onClick = {
-                                val clip = clipboard.getText()?.text
-                                if (!clip.isNullOrBlank()) sessionString = clip.trim()
-                            }) {
-                                Icon(Icons.Default.ContentPaste, "Coller")
-                            }
-                            IconButton(onClick = { showSession = !showSession }) {
-                                Icon(if (showSession) Icons.Default.VisibilityOff else Icons.Default.Visibility, null)
-                            }
-                        }
-                    },
-                    isError = error != null && sessionString.isNotBlank(),
-                    minLines = 2,
-                    maxLines = 4
-                )
-                Text(
-                    "Format Pyrogram v2 (275 bytes encodés en base64url)",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline
+                    label = { Text("Numéro entier (ex: 1234567)") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    leadingIcon = { Icon(Icons.Default.Numbers, null) }
                 )
             }
         }
 
-        // API Hash input
         item {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("api_hash", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
@@ -218,71 +125,241 @@ with app:
                     value = apiHash,
                     onValueChange = { apiHash = it; error = null },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Votre api_hash (my.telegram.org)") },
+                    label = { Text("Chaîne hexadécimale (32 chars)") },
                     singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    visualTransformation = if (showSession) VisualTransformation.None else PasswordVisualTransformation(),
+                    visualTransformation = PasswordVisualTransformation(),
                     leadingIcon = { Icon(Icons.Default.Key, null) }
                 )
             }
         }
 
-        // Error
         error?.let { err ->
-            item {
-                Surface(color = MaterialTheme.colorScheme.errorContainer, shape = RoundedCornerShape(10.dp)) {
-                    Row(modifier = Modifier.padding(12.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Icon(Icons.Default.Error, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
-                        Text(err, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer)
-                    }
-                }
-            }
+            item { ErrorBanner(err) }
         }
 
-        // Validate button
         item {
             Button(
                 onClick = {
-                    if (sessionString.isBlank()) { error = "La session string est vide."; return@Button }
-                    if (apiHash.isBlank()) { error = "L'api_hash est requis."; return@Button }
-                    viewModel.setupTelegram(sessionString.trim(), apiHash.trim()) { err ->
-                        error = err
+                    val id = apiIdText.trim().toIntOrNull()
+                    when {
+                        id == null || id <= 0 -> error = "api_id invalide (nombre entier requis)"
+                        apiHash.trim().length < 10 -> error = "api_hash trop court"
+                        else -> viewModel.saveTelegramCredentials(id, apiHash.trim())
                     }
                 },
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 shape = RoundedCornerShape(13.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0088CC))
             ) {
-                Icon(Icons.Default.Check, null, modifier = Modifier.size(20.dp))
+                Icon(Icons.Default.ArrowForward, null, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(8.dp))
-                Text("Valider la session", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text("Suivant", fontWeight = FontWeight.Bold, fontSize = 16.sp)
             }
-        }
-
-        item { Spacer(Modifier.height(32.dp)) }
-    }
-}
-
-@Composable
-private fun StepCard(number: String, title: String, body: String) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Box(
-            modifier = Modifier
-                .size(26.dp)
-                .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(50)),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(number, color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-        }
-        Column {
-            Text(title, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
-            Text(body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Browser Screen
+// Step 2 — Phone number
+// ──────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun TelegramPhoneScreen(viewModel: Ps2ViewModel) {
+    var phone by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    var loading by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier.fillMaxSize().padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Spacer(Modifier.height(24.dp))
+        TelegramHeader("Numéro de téléphone", "Entrez le numéro associé à votre compte Telegram. Un code vous sera envoyé.")
+
+        OutlinedTextField(
+            value = phone,
+            onValueChange = { phone = it; error = null },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Ex: +33612345678") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+            leadingIcon = { Icon(Icons.Default.Phone, null) },
+            isError = error != null
+        )
+
+        error?.let { ErrorBanner(it) }
+
+        Button(
+            onClick = {
+                val p = phone.trim()
+                if (p.length < 7) { error = "Numéro trop court"; return@Button }
+                loading = true
+                viewModel.sendTelegramPhone(p) { err ->
+                    error = err
+                    loading = false
+                }
+            },
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+            shape = RoundedCornerShape(13.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0088CC)),
+            enabled = !loading
+        ) {
+            if (loading) {
+                CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
+            } else {
+                Icon(Icons.Default.Send, null, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Envoyer le code", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            }
+        }
+
+        TextButton(onClick = { viewModel.disconnectTelegram() }) {
+            Text("Annuler / Changer les credentials")
+        }
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Step 3 — OTP code
+// ──────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun TelegramCodeScreen(viewModel: Ps2ViewModel, phone: String) {
+    var code by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    var loading by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier.fillMaxSize().padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Spacer(Modifier.height(24.dp))
+        TelegramHeader("Code de vérification", "Un code a été envoyé à $phone via Telegram.")
+
+        OutlinedTextField(
+            value = code,
+            onValueChange = { code = it.filter { c -> c.isDigit() }; error = null },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Code à 5 chiffres") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            leadingIcon = { Icon(Icons.Default.Pin, null) },
+            isError = error != null
+        )
+
+        error?.let { ErrorBanner(it) }
+
+        Button(
+            onClick = {
+                if (code.length < 4) { error = "Code trop court"; return@Button }
+                loading = true
+                viewModel.sendTelegramCode(code.trim()) { err ->
+                    error = err
+                    loading = false
+                }
+            },
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+            shape = RoundedCornerShape(13.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0088CC)),
+            enabled = !loading
+        ) {
+            if (loading) {
+                CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
+            } else {
+                Icon(Icons.Default.Check, null, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Valider le code", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            }
+        }
+
+        TextButton(onClick = { viewModel.disconnectTelegram() }) {
+            Text("Recommencer")
+        }
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Step 4 — 2FA password (optional)
+// ──────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun TelegramPasswordScreen(viewModel: Ps2ViewModel) {
+    var password by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    var loading by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier.fillMaxSize().padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Spacer(Modifier.height(24.dp))
+        TelegramHeader("Mot de passe 2FA", "Votre compte a la vérification en deux étapes activée.")
+
+        OutlinedTextField(
+            value = password,
+            onValueChange = { password = it; error = null },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Mot de passe cloud Telegram") },
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            leadingIcon = { Icon(Icons.Default.Lock, null) },
+            isError = error != null
+        )
+
+        error?.let { ErrorBanner(it) }
+
+        Button(
+            onClick = {
+                if (password.isBlank()) { error = "Mot de passe vide"; return@Button }
+                loading = true
+                viewModel.sendTelegramPassword(password) { err ->
+                    error = err
+                    loading = false
+                }
+            },
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+            shape = RoundedCornerShape(13.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0088CC)),
+            enabled = !loading
+        ) {
+            if (loading) {
+                CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
+            } else {
+                Icon(Icons.Default.LockOpen, null, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Se connecter", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            }
+        }
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Error state screen
+// ──────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun TelegramErrorScreen(message: String, onReset: () -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(32.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(Icons.Default.Error, null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.error)
+        Spacer(Modifier.height(16.dp))
+        Text("Erreur Telegram", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(8.dp))
+        Text(message, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(24.dp))
+        Button(onClick = onReset) { Text("Recommencer") }
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Browser Screen (main screen when ready)
 // ──────────────────────────────────────────────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -293,18 +370,13 @@ private fun TelegramBrowserScreen(viewModel: Ps2ViewModel, tgState: TelegramUiSt
     var showDisconnectConfirm by remember { mutableStateOf(false) }
     val uriHandler = LocalUriHandler.current
 
-    // Add channel dialog
     if (showAddChannel) {
         AddChannelDialog(
-            onAdd = { username, name ->
-                viewModel.addTelegramChannel(username, name)
-                showAddChannel = false
-            },
+            onAdd = { username, name -> viewModel.addTelegramChannel(username, name); showAddChannel = false },
             onDismiss = { showAddChannel = false }
         )
     }
 
-    // Delete channel dialog
     showDeleteConfirm?.let { chan ->
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = null },
@@ -321,13 +393,12 @@ private fun TelegramBrowserScreen(viewModel: Ps2ViewModel, tgState: TelegramUiSt
         )
     }
 
-    // Disconnect dialog
     if (showDisconnectConfirm) {
         AlertDialog(
             onDismissRequest = { showDisconnectConfirm = false },
             icon = { Icon(Icons.Default.LinkOff, null, tint = MaterialTheme.colorScheme.error) },
             title = { Text("Déconnecter Telegram ?") },
-            text = { Text("La session sera supprimée. Vous devrez recoller votre session string.") },
+            text = { Text("La session TDLib sera supprimée.") },
             confirmButton = {
                 Button(
                     onClick = { viewModel.disconnectTelegram(); showDisconnectConfirm = false },
@@ -349,16 +420,23 @@ private fun TelegramBrowserScreen(viewModel: Ps2ViewModel, tgState: TelegramUiSt
             ) {
                 Icon(Icons.Default.Send, null, tint = Color.White, modifier = Modifier.size(20.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Telegram — Jeux PS2", fontWeight = FontWeight.Bold, color = Color.White, style = MaterialTheme.typography.titleSmall)
                     Text(
-                        "${tgState.channels.size} canal(aux) • ${tgState.allPosts.size} jeux indexés",
+                        "Telegram — Jeux PS2",
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    Text(
+                        "${tgState.channels.size} canal(aux) • ${tgState.allPosts.size} jeux indexés • TDLib",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.White.copy(alpha = 0.8f)
                     )
                 }
                 IconButton(onClick = { viewModel.refreshTelegramPosts() }) {
-                    if (tgState.isLoading) CircularProgressIndicator(Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
-                    else Icon(Icons.Default.Refresh, null, tint = Color.White)
+                    if (tgState.isLoading)
+                        CircularProgressIndicator(Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
+                    else
+                        Icon(Icons.Default.Refresh, null, tint = Color.White)
                 }
                 IconButton(onClick = { showDisconnectConfirm = true }) {
                     Icon(Icons.Default.Settings, null, tint = Color.White)
@@ -389,16 +467,12 @@ private fun TelegramBrowserScreen(viewModel: Ps2ViewModel, tgState: TelegramUiSt
                     },
                     leadingIcon = { Icon(Icons.Default.Send, null, modifier = Modifier.size(13.dp)) },
                     trailingIcon = {
-                        IconButton(
-                            onClick = { showDeleteConfirm = chan },
-                            modifier = Modifier.size(18.dp)
-                        ) {
+                        IconButton(onClick = { showDeleteConfirm = chan }, modifier = Modifier.size(18.dp)) {
                             Icon(Icons.Default.Close, null, modifier = Modifier.size(13.dp))
                         }
                     }
                 )
             }
-            // Add channel button
             InputChip(
                 selected = false,
                 onClick = { showAddChannel = true },
@@ -409,12 +483,8 @@ private fun TelegramBrowserScreen(viewModel: Ps2ViewModel, tgState: TelegramUiSt
 
         HorizontalDivider()
 
-        // ── Error ──
         tgState.error?.let { err ->
-            Surface(
-                color = MaterialTheme.colorScheme.errorContainer,
-                modifier = Modifier.fillMaxWidth()
-            ) {
+            Surface(color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth()) {
                 Row(modifier = Modifier.padding(10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Icon(Icons.Default.Warning, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
                     Text(err, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer, modifier = Modifier.weight(1f))
@@ -429,24 +499,14 @@ private fun TelegramBrowserScreen(viewModel: Ps2ViewModel, tgState: TelegramUiSt
         else tgState.allPosts.filter { it.channelUsername == tgState.selectedChannel }
 
         if (displayPosts.isEmpty() && !tgState.isLoading) {
-            // Empty state
             Column(
                 modifier = Modifier.weight(1f).padding(32.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                Icon(Icons.Default.CloudOff, null, modifier = Modifier.size(64.dp),
-                    tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+                Icon(Icons.Default.CloudOff, null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
                 Spacer(Modifier.height(16.dp))
-                Text("Aucun jeu trouvé", style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "Appuyez sur le bouton actualiser ou\nchoisissez un autre canal.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.outline,
-                    textAlign = TextAlign.Center
-                )
+                Text("Aucun jeu trouvé", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(16.dp))
                 Button(onClick = { viewModel.refreshTelegramPosts() }) {
                     Icon(Icons.Default.Refresh, null, modifier = Modifier.size(16.dp))
@@ -466,32 +526,21 @@ private fun TelegramBrowserScreen(viewModel: Ps2ViewModel, tgState: TelegramUiSt
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            "${displayPosts.size} jeu(x) disponible(s)",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            "Web • MTProto pour télécharger",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.outline
-                        )
+                        Text("${displayPosts.size} jeu(x) disponible(s)", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                        Text("TDLib — multi-connexion CDN", style = MaterialTheme.typography.labelSmall, color = Color(0xFF0088CC))
                     }
                 }
                 items(displayPosts, key = { "${it.channelUsername}_${it.messageId}" }) { post ->
-                    val dlProgress = tgState.downloads[post.messageId.toString()]
+                    val dlId = TelegramDownloadManager.downloadId(post.channelUsername, post.messageId)
+                    val dlProgress = tgState.downloads[dlId]
                     TelegramGameCard(
                         post = post,
                         downloadProgress = dlProgress,
                         onDownload = { viewModel.downloadTelegramGame(post) },
-                        onOpenTelegram = {
-                            uriHandler.openUri("https://t.me/${post.channelUsername}/${post.messageId}")
-                        },
-                        onLoadMore = { viewModel.loadMoreTelegramPosts(post.channelUsername, post.messageId) }
+                        onCancel = { viewModel.cancelTelegramDownload(dlId) },
+                        onOpenTelegram = { uriHandler.openUri("https://t.me/${post.channelUsername}/${post.messageId}") }
                     )
                 }
-                // Load more
                 item {
                     tgState.selectedChannel?.let { ch ->
                         TextButton(
@@ -500,7 +549,7 @@ private fun TelegramBrowserScreen(viewModel: Ps2ViewModel, tgState: TelegramUiSt
                         ) {
                             Icon(Icons.Default.ExpandMore, null, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text("Charger plus de messages")
+                            Text("Charger plus")
                         }
                     }
                 }
@@ -509,33 +558,31 @@ private fun TelegramBrowserScreen(viewModel: Ps2ViewModel, tgState: TelegramUiSt
     }
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// Game card
+// ──────────────────────────────────────────────────────────────────────────────
+
 @Composable
 private fun TelegramGameCard(
     post: TelegramGamePost,
-    downloadProgress: com.usbdiskmanager.ps2.telegram.TelegramDownloadProgress?,
+    downloadProgress: TgDownloadProgress?,
     onDownload: () -> Unit,
-    onOpenTelegram: () -> Unit,
-    onLoadMore: () -> Unit
+    onCancel: () -> Unit,
+    onOpenTelegram: () -> Unit
 ) {
-    Card(
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth().animateContentSize()
-    ) {
+    Card(shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth().animateContentSize()) {
         Row(
             modifier = Modifier.padding(12.dp).fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.Top
         ) {
-            // Icon / cover area
             Surface(
                 color = Color(0xFF0088CC).copy(alpha = 0.12f),
                 shape = RoundedCornerShape(8.dp),
                 modifier = Modifier.size(52.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.VideogameAsset, null,
-                        tint = Color(0xFF0088CC),
-                        modifier = Modifier.size(28.dp))
+                    Icon(Icons.Default.VideogameAsset, null, tint = Color(0xFF0088CC), modifier = Modifier.size(28.dp))
                 }
             }
 
@@ -549,12 +596,9 @@ private fun TelegramGameCard(
                 )
                 Spacer(Modifier.height(3.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (post.region.isNotBlank()) {
-                        RegionBadge(post.region)
-                    }
+                    if (post.region.isNotBlank()) RegionBadge(post.region)
                     if (post.gameId.isNotBlank()) {
-                        Text(post.gameId, style = MaterialTheme.typography.labelSmall,
-                            fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.primary)
+                        Text(post.gameId, style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.primary)
                     }
                 }
                 Spacer(Modifier.height(3.dp))
@@ -569,60 +613,130 @@ private fun TelegramGameCard(
                         )
                     }
                     if (post.sizeFormatted != "?") {
-                        Text(post.sizeFormatted, style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.outline)
+                        Text(post.sizeFormatted, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
                     }
-                    Text("@${post.channelUsername}", style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFF0088CC), fontSize = 10.sp)
+                    Text("@${post.channelUsername}", style = MaterialTheme.typography.labelSmall, color = Color(0xFF0088CC), fontSize = 10.sp)
                 }
 
-                // Download progress
+                // Progress
                 downloadProgress?.let { prog ->
                     Spacer(Modifier.height(6.dp))
-                    if (prog.isDone) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF4CAF50), modifier = Modifier.size(16.dp))
-                            Text("Téléchargé ✓", style = MaterialTheme.typography.labelSmall, color = Color(0xFF4CAF50))
-                        }
-                    } else if (prog.error != null) {
-                        Text("Erreur: ${prog.error}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
-                    } else {
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("Téléchargement…", style = MaterialTheme.typography.labelSmall)
-                                Text("%.0f%%".format(prog.fraction * 100), style = MaterialTheme.typography.labelSmall, color = Color(0xFF0088CC))
+                    when {
+                        prog.status == TgDownloadStatus.DONE -> {
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF4CAF50), modifier = Modifier.size(16.dp))
+                                Text("Téléchargé ✓", style = MaterialTheme.typography.labelSmall, color = Color(0xFF4CAF50))
                             }
-                            LinearProgressIndicator(
-                                progress = { prog.fraction },
-                                modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
-                                color = Color(0xFF0088CC)
-                            )
+                        }
+                        prog.status == TgDownloadStatus.ERROR -> {
+                            Text("Erreur: ${prog.error}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                        }
+                        prog.status == TgDownloadStatus.QUEUED -> {
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 2.dp)
+                                Text("En attente…", style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                        else -> {
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("%.0f%%".format(prog.fraction * 100), style = MaterialTheme.typography.labelSmall, color = Color(0xFF0088CC), fontWeight = FontWeight.Bold)
+                                    Text(prog.speedFormatted, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                                }
+                                LinearProgressIndicator(
+                                    progress = { prog.fraction },
+                                    modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
+                                    color = Color(0xFF0088CC)
+                                )
+                                if (prog.etaSeconds > 0) {
+                                    val etaText = if (prog.etaSeconds > 60) "${prog.etaSeconds / 60}m ${prog.etaSeconds % 60}s"
+                                    else "${prog.etaSeconds}s"
+                                    Text("ETA: $etaText", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                                }
+                            }
                         }
                     }
                 }
             }
 
-            // Action buttons
+            // Action column
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                if (downloadProgress?.isDone != true && downloadProgress?.error == null && downloadProgress?.fraction ?: 0f == 0f) {
+                val isActive = downloadProgress?.status == TgDownloadStatus.DOWNLOADING ||
+                    downloadProgress?.status == TgDownloadStatus.QUEUED
+                val isDone = downloadProgress?.status == TgDownloadStatus.DONE
+
+                if (!isDone && !isActive) {
                     FilledTonalIconButton(
                         onClick = onDownload,
                         modifier = Modifier.size(36.dp),
-                        colors = IconButtonDefaults.filledTonalIconButtonColors(
-                            containerColor = Color(0xFF0088CC).copy(alpha = 0.15f)
-                        )
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = Color(0xFF0088CC).copy(alpha = 0.15f))
                     ) {
                         Icon(Icons.Default.Download, "Télécharger", modifier = Modifier.size(18.dp), tint = Color(0xFF0088CC))
                     }
                 }
-                FilledTonalIconButton(
-                    onClick = onOpenTelegram,
-                    modifier = Modifier.size(36.dp)
-                ) {
+                if (isActive) {
+                    FilledTonalIconButton(
+                        onClick = onCancel,
+                        modifier = Modifier.size(36.dp),
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+                    ) {
+                        Icon(Icons.Default.Stop, "Annuler", modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.error)
+                    }
+                }
+                FilledTonalIconButton(onClick = onOpenTelegram, modifier = Modifier.size(36.dp)) {
                     Icon(Icons.Default.OpenInNew, "Ouvrir Telegram", modifier = Modifier.size(16.dp))
                 }
             }
         }
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Shared components
+// ──────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun TelegramHeader(title: String, subtitle: String) {
+    Surface(color = Color(0xFF1A237E).copy(alpha = 0.15f), shape = RoundedCornerShape(14.dp)) {
+        Row(
+            modifier = Modifier.padding(14.dp).fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier.size(48.dp).background(Color(0xFF0088CC), RoundedCornerShape(12.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Send, null, tint = Color.White, modifier = Modifier.size(24.dp))
+            }
+            Column {
+                Text(title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ErrorBanner(message: String) {
+    Surface(color = MaterialTheme.colorScheme.errorContainer, shape = RoundedCornerShape(10.dp)) {
+        Row(modifier = Modifier.padding(12.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(Icons.Default.Error, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
+            Text(message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer)
+        }
+    }
+}
+
+@Composable
+private fun StepItem(number: String, text: String) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier.size(22.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(50)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(number, color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+        }
+        Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -631,8 +745,8 @@ private fun RegionBadge(region: String) {
     val color = when (region) {
         "NTSC-U" -> Color(0xFF1565C0)
         "NTSC-J" -> Color(0xFFC62828)
-        "PAL"    -> Color(0xFF2E7D32)
-        else     -> Color(0xFF757575)
+        "PAL" -> Color(0xFF2E7D32)
+        else -> Color(0xFF757575)
     }
     Surface(color = color.copy(alpha = 0.15f), shape = RoundedCornerShape(4.dp)) {
         Text(
@@ -648,10 +762,7 @@ private fun RegionBadge(region: String) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AddChannelDialog(
-    onAdd: (String, String) -> Unit,
-    onDismiss: () -> Unit
-) {
+private fun AddChannelDialog(onAdd: (String, String) -> Unit, onDismiss: () -> Unit) {
     var username by remember { mutableStateOf("") }
     var displayName by remember { mutableStateOf("") }
 
@@ -663,9 +774,7 @@ private fun AddChannelDialog(
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(
                     value = username,
-                    onValueChange = {
-                        username = it.removePrefix("https://t.me/").removePrefix("@").trim()
-                    },
+                    onValueChange = { username = it.removePrefix("https://t.me/").removePrefix("@").trim() },
                     label = { Text("@username ou lien t.me/...") },
                     singleLine = true,
                     leadingIcon = { Text("@", modifier = Modifier.padding(start = 12.dp), fontWeight = FontWeight.Bold) },
@@ -679,7 +788,7 @@ private fun AddChannelDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
                 Text(
-                    "Le canal doit être public. La navigation utilise la prévisualisation web, le téléchargement nécessite votre session Telegram.",
+                    "Le canal doit être public. La navigation utilise le web, le téléchargement se fait via TDLib (CDN multi-connexion).",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -687,17 +796,11 @@ private fun AddChannelDialog(
         },
         confirmButton = {
             Button(
-                onClick = {
-                    if (username.isNotBlank()) {
-                        onAdd(username.trim(), displayName.ifBlank { "@$username" })
-                    }
-                },
+                onClick = { if (username.isNotBlank()) onAdd(username.trim(), displayName.ifBlank { "@$username" }) },
                 enabled = username.isNotBlank(),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0088CC))
             ) { Text("Ajouter") }
         },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Annuler") }
-        }
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } }
     )
 }

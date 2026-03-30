@@ -1,14 +1,21 @@
 package com.usbdiskmanager.ps2.data.db
 
+import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
-import android.content.Context
+import com.usbdiskmanager.ps2.data.download.TelegramDownloadDao
+import com.usbdiskmanager.ps2.data.download.TelegramDownloadEntity
 import com.usbdiskmanager.ps2.domain.model.ConversionJob
 
-@Database(entities = [ConversionJob::class], version = 1, exportSchema = false)
+@Database(
+    entities = [ConversionJob::class, TelegramDownloadEntity::class],
+    version = 2,
+    exportSchema = false
+)
 abstract class Ps2Database : RoomDatabase() {
     abstract fun conversionJobDao(): ConversionJobDao
+    abstract fun telegramDownloadDao(): TelegramDownloadDao
 
     companion object {
         @Volatile
