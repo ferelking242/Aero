@@ -376,6 +376,11 @@ class BrowserActivity : AppCompatActivity() {
         collectFlow(viewModel.settings) { settings ->
             webViews.values.forEach { wv -> WebViewFactory.applySettings(wv, settings) }
         }
+
+        collectFlow(viewModel.clearDataEvent) {
+            webViews.values.forEach { wv -> wv.clearCache(true) }
+            toast(getString(R.string.data_cleared))
+        }
     }
 
     private fun launchIsolatedTab(slot: Int, url: String) {

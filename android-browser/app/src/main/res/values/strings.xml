@@ -112,12 +112,43 @@
     <string name="open_source_summary">Aero Browser — Fast, multi-process, and private</string>
     <string name="about_description">Aero Browser — Fast, multi-process, and private.</string>
 
-    <!-- Via-style menu -->
+    <!-- Via-style menu — page 1 -->
     <string name="menu_dark_mode">Night Mode</string>
+    <string name="menu_light_mode">Day Mode</string>
     <string name="menu_incognito_label">Incognito</string>
     <string name="menu_add_bookmark">Add Bookmark</string>
     <string name="menu_tools_label">Profiles</string>
+    <string name="menu_mobile_mode">Mobile Mode</string>
     <string name="menu_exit">Exit</string>
+    <string name="dismiss">Dismiss</string>
+    <string name="exit">Exit app</string>
+
+    <!-- Via-style menu — page 2 -->
+    <string name="menu_find_in_page">Find in Page</string>
+    <string name="menu_save">Save</string>
+    <string name="menu_saved_pages">Saved Pages</string>
+    <string name="menu_translate">Translate</string>
+    <string name="menu_view_source">View Source</string>
+    <string name="menu_fullscreen">Fullscreen</string>
+    <string name="menu_block_images">Block Images</string>
+    <string name="menu_allow_images">Allow Images</string>
+    <string name="menu_resource_sniffer">Res. Sniffer</string>
+    <string name="menu_user_agent">User Agent</string>
+    <string name="menu_network_log">Network Log</string>
+
+    <!-- Via-style menu — page 3 -->
+    <string name="menu_qr_scan">Scan QR</string>
+    <string name="menu_add_to_home">Add to Home</string>
+    <string name="menu_read_aloud">Read Aloud</string>
+    <string name="menu_ai">AI</string>
+    <string name="menu_orientation">Orientation</string>
+    <string name="menu_ad_block_on">AdBlock ON</string>
+    <string name="menu_ad_block_off">Block Ads</string>
+    <string name="menu_mark_ads">Mark as ADS</string>
+    <string name="menu_text_size">Text Size</string>
+    <string name="menu_clear_data">Clear Data</string>
+    <string name="menu_customize">Customize</string>
+    <string name="data_cleared">Data cleared</string>
 
     <!-- Isolated Tabs -->
     <string name="isolated_tab">Isolated Tab</string>

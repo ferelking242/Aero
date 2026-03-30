@@ -173,6 +173,25 @@ class BrowserViewModel @Inject constructor(
         viewModelScope.launch { settingsDataStore.setDarkMode(enabled) }
     }
 
+    fun setImagesEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsDataStore.setImagesEnabled(enabled) }
+    }
+
+    fun setAdBlockerEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsDataStore.setAdBlockerEnabled(enabled) }
+    }
+
+    private val _clearDataEvent = MutableSharedFlow<Unit>()
+    val clearDataEvent: SharedFlow<Unit> = _clearDataEvent.asSharedFlow()
+
+    fun clearBrowsingData() {
+        viewModelScope.launch {
+            historyRepository.clearHistoryForProfile(activeProfileId)
+            android.webkit.CookieManager.getInstance().removeAllCookies(null)
+            _clearDataEvent.emit(Unit)
+        }
+    }
+
     fun toggleBookmark() {
         val url = _currentUrl.value
         val title = _currentTitle.value
