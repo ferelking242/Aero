@@ -1,5 +1,6 @@
 package com.velobrowser.ui.isolated
 
+import android.app.AlertDialog
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -28,6 +29,7 @@ import com.velobrowser.data.local.datastore.BrowserSettings
 import com.velobrowser.data.local.datastore.SettingsDataStore
 import com.velobrowser.databinding.ActivityIsolatedBrowserBinding
 import com.velobrowser.service.TabKeepAliveService
+import com.velobrowser.ui.browser.BrowserActivity
 import com.velobrowser.utils.LocaleUtils
 import com.velobrowser.utils.PermissionUtils
 import com.velobrowser.utils.UrlUtils
@@ -99,10 +101,10 @@ abstract class IsolatedBrowserActivity : AppCompatActivity() {
         binding = ActivityIsolatedBrowserBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        setupSlotIndicator()
         setupWebView()
         setupUrlBar()
         setupNavigationControls()
+        setupBottomNavigation()
 
         startKeepAliveService()
         registerLoadUrlReceiver()
@@ -118,6 +120,7 @@ abstract class IsolatedBrowserActivity : AppCompatActivity() {
         }
 
         IsolatedTabManager.saveSlotState(this, slot, url, "Isolated Tab $slot")
+        updateTabCount()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -127,10 +130,6 @@ abstract class IsolatedBrowserActivity : AppCompatActivity() {
         if (url.isNotEmpty()) {
             webView?.loadUrl(url)
         }
-    }
-
-    private fun setupSlotIndicator() {
-        binding.tvIsolatedSlotBadge.text = getString(R.string.isolated_slot_badge, slot)
     }
 
     private fun setupWebView() {
@@ -178,11 +177,7 @@ abstract class IsolatedBrowserActivity : AppCompatActivity() {
                     )
                 }
             },
-            onTitleChanged = { title ->
-                runOnUiThread {
-                    binding.tvIsolatedTitle.text = title
-                }
-            },
+            onTitleChanged = { _ -> },
             onFaviconReceived = { _ -> },
             onShowFileChooser = { _ -> false },
             onShowCustomView = { view, callback -> showFullscreen(view, callback) },
@@ -271,6 +266,63 @@ abstract class IsolatedBrowserActivity : AppCompatActivity() {
         }
     }
 
+    private fun setupBottomNavigation() {
+        binding.btnHome.setOnClickListener {
+            activityScope.launch {
+                val settings = settingsDataStore.settings.first()
+                webView?.loadUrl(settings.homepage)
+            }
+        }
+
+        binding.btnTabs.setOnClickListener {
+            showIsolatedTabPicker()
+        }
+    }
+
+    private fun updateTabCount() {
+        var count = 0
+        for (s in 1..IsolatedTabManager.MAX_SLOTS) {
+            if (IsolatedTabManager.isSlotActive(this, s)) count++
+        }
+        binding.tvTabCount.text = count.toString()
+    }
+
+    private fun showIsolatedTabPicker() {
+        val items = mutableListOf<String>()
+        val actions = mutableListOf<() -> Unit>()
+
+        items.add(getString(R.string.return_to_main))
+        actions.add {
+            val intent = Intent(this, BrowserActivity::class.java)
+            intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+            startActivity(intent)
+        }
+
+        for (s in 1..IsolatedTabManager.MAX_SLOTS) {
+            if (IsolatedTabManager.isSlotActive(this, s)) {
+                val title = IsolatedTabManager.getSlotTitle(this, s)
+                val label = if (s == slot) "→ $title" else title
+                items.add(label)
+                val targetSlot = s
+                actions.add {
+                    if (targetSlot != slot) {
+                        val url = IsolatedTabManager.getSlotUrl(this, targetSlot)
+                        val intent = createIntent(this, targetSlot, url)
+                        intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                        startActivity(intent)
+                    }
+                }
+            }
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.tabs))
+            .setItems(items.toTypedArray()) { _, which ->
+                actions[which].invoke()
+            }
+            .show()
+    }
+
     private fun updateToolbar(url: String) {
         if (!binding.urlEditText.hasFocus()) {
             binding.urlEditText.setText(url)
@@ -279,7 +331,9 @@ abstract class IsolatedBrowserActivity : AppCompatActivity() {
             if (UrlUtils.isHttps(url)) R.drawable.ic_lock else R.drawable.ic_lock_open
         )
         binding.btnBack.isEnabled = webView?.canGoBack() == true
+        binding.btnBack.alpha = if (webView?.canGoBack() == true) 1f else 0.35f
         binding.btnForward.isEnabled = webView?.canGoForward() == true
+        binding.btnForward.alpha = if (webView?.canGoForward() == true) 1f else 0.35f
     }
 
     private fun notifyUrlChanged(url: String, title: String) {
@@ -354,20 +408,18 @@ abstract class IsolatedBrowserActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
-        // INTENTIONALLY do NOT call webView.onPause() — keeps JS timers alive in background
         CookieManager.getInstance().flush()
     }
 
     override fun onResume() {
         super.onResume()
-        // Resume rendering and timers
         webView?.onResume()
         webView?.resumeTimers()
+        updateTabCount()
     }
 
     override fun onStop() {
         super.onStop()
-        // Do NOT pause WebView rendering — allow background execution
     }
 
     override fun onDestroy() {

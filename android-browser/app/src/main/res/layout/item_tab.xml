@@ -39,6 +39,26 @@
             app:layout_constraintStart_toStartOf="@id/tabPreviewArea"
             app:layout_constraintEnd_toEndOf="@id/tabPreviewArea" />
 
+        <!-- Group badge (shown when tab is in a group) -->
+        <TextView
+            android:id="@+id/tvGroupBadge"
+            android:layout_width="wrap_content"
+            android:layout_height="20dp"
+            android:visibility="gone"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:textSize="10sp"
+            android:textStyle="bold"
+            android:textColor="@android:color/white"
+            android:gravity="center_vertical"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:background="@drawable/bg_group_badge"
+            android:layout_marginStart="8dp"
+            android:layout_marginBottom="4dp"
+            app:layout_constraintBottom_toTopOf="@id/tabFooter"
+            app:layout_constraintStart_toStartOf="parent" />
+
         <!-- Footer bar with title + close -->
         <LinearLayout
             android:id="@+id/tabFooter"

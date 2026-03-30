@@ -1,10 +1,14 @@
 package com.velobrowser.ui.tabs
 
+import android.app.AlertDialog
 import android.content.Intent
 import android.os.Bundle
+import android.text.InputType
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.EditText
+import android.widget.LinearLayout
 import androidx.fragment.app.activityViewModels
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -19,6 +23,7 @@ import com.velobrowser.ui.isolated.IsolatedBrowserActivity
 import com.velobrowser.utils.collectFlow
 import com.velobrowser.utils.toast
 import dagger.hilt.android.AndroidEntryPoint
+import java.util.UUID
 
 @AndroidEntryPoint
 class TabsBottomSheet : BottomSheetDialogFragment() {
@@ -168,13 +173,70 @@ class TabsBottomSheet : BottomSheetDialogFragment() {
         }
     }
 
+    private fun onTabLongClicked(tab: BrowserTab) {
+        if (tab.isIsolated) return
+
+        val ctx = requireContext()
+        val existingGroups = viewModel.tabGroups()
+
+        val options = mutableListOf<String>()
+        val actions = mutableListOf<() -> Unit>()
+
+        options.add(getString(R.string.create_group))
+        actions.add { showCreateGroupDialog(tab) }
+
+        existingGroups.forEach { (groupId, groupName) ->
+            if (tab.groupId == groupId) return@forEach
+            options.add("${getString(R.string.add_to_group)}: $groupName")
+            actions.add { viewModel.assignToGroup(tab.id, groupId, groupName) }
+        }
+
+        if (tab.groupId != null) {
+            options.add(getString(R.string.remove_from_group))
+            actions.add { viewModel.removeFromGroup(tab.id) }
+        }
+
+        AlertDialog.Builder(ctx)
+            .setTitle(tab.title.ifBlank { getString(R.string.new_tab) })
+            .setItems(options.toTypedArray()) { _, which -> actions[which].invoke() }
+            .show()
+    }
+
+    private fun showCreateGroupDialog(tab: BrowserTab) {
+        val ctx = requireContext()
+        val input = EditText(ctx).apply {
+            hint = getString(R.string.group_name_hint)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS
+        }
+        val container = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            val padding = (16 * resources.displayMetrics.density).toInt()
+            setPadding(padding, padding / 2, padding, 0)
+            addView(input)
+        }
+
+        AlertDialog.Builder(ctx)
+            .setTitle(getString(R.string.create_group))
+            .setView(container)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                val name = input.text.toString().trim()
+                if (name.isNotEmpty()) {
+                    val groupId = UUID.randomUUID().toString()
+                    viewModel.assignToGroup(tab.id, groupId, name)
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
     inner class TabsPagerAdapter : RecyclerView.Adapter<TabsPagerAdapter.PageHolder>() {
 
         private val tabAdapters = Array(3) {
             TabsAdapter(
                 activeTabId = { viewModel.activeTabId.value },
                 onTabClicked = ::onTabClicked,
-                onTabClosed = ::onTabClosed
+                onTabClosed = ::onTabClosed,
+                onTabLongClicked = ::onTabLongClicked
             )
         }
 

@@ -138,4 +138,18 @@ class TabManager @Inject constructor() {
     fun incognitoTabs(): List<BrowserTab> = _tabs.value.filter { it.isIncognito }
 
     fun isolatedTabs(): List<BrowserTab> = _tabs.value.filter { it.isIsolated }
+
+    fun assignToGroup(tabId: String, groupId: String, groupName: String) {
+        updateTab(tabId) { it.copy(groupId = groupId, groupName = groupName) }
+    }
+
+    fun removeFromGroup(tabId: String) {
+        updateTab(tabId) { it.copy(groupId = null, groupName = null) }
+    }
+
+    fun tabGroups(): List<Pair<String, String>> =
+        _tabs.value
+            .filter { it.groupId != null && it.groupName != null }
+            .distinctBy { it.groupId }
+            .map { Pair(it.groupId!!, it.groupName!!) }
 }

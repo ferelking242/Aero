@@ -14,7 +14,8 @@ import com.velobrowser.domain.model.BrowserTab
 class TabsAdapter(
     private val activeTabId: () -> String?,
     private val onTabClicked: (BrowserTab) -> Unit,
-    private val onTabClosed: (BrowserTab) -> Unit
+    private val onTabClosed: (BrowserTab) -> Unit,
+    private val onTabLongClicked: ((BrowserTab) -> Unit)? = null
 ) : ListAdapter<BrowserTab, TabsAdapter.ViewHolder>(DIFF) {
 
     inner class ViewHolder(private val binding: ItemTabBinding) :
@@ -85,8 +86,19 @@ class TabsAdapter(
                 }
             }
 
+            if (tab.groupName != null) {
+                binding.tvGroupBadge.visibility = View.VISIBLE
+                binding.tvGroupBadge.text = tab.groupName
+            } else {
+                binding.tvGroupBadge.visibility = View.GONE
+            }
+
             binding.root.setOnClickListener { onTabClicked(tab) }
             binding.btnCloseTab.setOnClickListener { onTabClosed(tab) }
+            binding.root.setOnLongClickListener {
+                onTabLongClicked?.invoke(tab)
+                true
+            }
         }
     }
 

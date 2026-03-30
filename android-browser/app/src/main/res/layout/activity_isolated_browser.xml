@@ -7,50 +7,7 @@
     android:layout_height="match_parent"
     android:fitsSystemWindows="true">
 
-    <!-- Isolated Tab Banner -->
-    <LinearLayout
-        android:id="@+id/isolatedBanner"
-        android:layout_width="0dp"
-        android:layout_height="28dp"
-        android:orientation="horizontal"
-        android:background="@color/color_isolated_banner_bg"
-        android:gravity="center_vertical"
-        android:paddingStart="12dp"
-        android:paddingEnd="8dp"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
-
-        <ImageView
-            android:layout_width="14dp"
-            android:layout_height="14dp"
-            android:src="@drawable/ic_isolated_tab"
-            android:tint="@color/color_isolated_banner_text"
-            android:layout_marginEnd="6dp" />
-
-        <TextView
-            android:id="@+id/tvIsolatedSlotBadge"
-            android:layout_width="0dp"
-            android:layout_weight="1"
-            android:layout_height="wrap_content"
-            android:text="Isolated · Slot 1"
-            android:textColor="@color/color_isolated_banner_text"
-            android:textSize="11sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/tvIsolatedTitle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textColor="@color/color_isolated_banner_text"
-            android:textSize="11sp"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:maxWidth="160dp" />
-
-    </LinearLayout>
-
-    <!-- Top Toolbar -->
+    <!-- Top Toolbar: lock | URL bar | refresh (no slot badge, no back/forward — they're in bottom bar) -->
     <LinearLayout
         android:id="@+id/topToolbar"
         android:layout_width="0dp"
@@ -61,31 +18,18 @@
         android:gravity="center_vertical"
         android:paddingStart="4dp"
         android:paddingEnd="4dp"
-        app:layout_constraintTop_toBottomOf="@id/isolatedBanner"
+        app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
-        <ImageButton
-            android:id="@+id/btnBack"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/back"
-            android:src="@drawable/ic_arrow_back"
-            android:tint="@color/color_isolated_icon"
-            android:enabled="false"
-            android:alpha="0.4" />
-
-        <ImageButton
-            android:id="@+id/btnForward"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/forward"
-            android:src="@drawable/ic_arrow_forward"
-            android:tint="@color/color_isolated_icon"
-            android:enabled="false"
-            android:alpha="0.4" />
+        <!-- Isolated accent dot -->
+        <View
+            android:layout_width="5dp"
+            android:layout_height="5dp"
+            android:background="@color/color_isolated_accent"
+            android:layout_marginStart="6dp"
+            android:layout_marginEnd="6dp"
+            android:importantForAccessibility="no" />
 
         <!-- URL Bar -->
         <LinearLayout
@@ -98,7 +42,6 @@
             android:gravity="center_vertical"
             android:paddingStart="8dp"
             android:paddingEnd="8dp"
-            android:layout_marginStart="4dp"
             android:layout_marginEnd="4dp">
 
             <ImageButton
@@ -138,15 +81,6 @@
             android:src="@drawable/ic_refresh"
             android:tint="@color/color_isolated_icon" />
 
-        <ImageButton
-            android:id="@+id/btnClose"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/close_isolated_tab"
-            android:src="@drawable/ic_close"
-            android:tint="@color/color_isolated_icon" />
-
     </LinearLayout>
 
     <!-- Progress Bar -->
@@ -163,15 +97,105 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
-    <!-- WebView Container -->
+    <!-- WebView Container (fills between progress bar and bottom bar) -->
     <FrameLayout
         android:id="@+id/webViewContainer"
         android:layout_width="0dp"
         android:layout_height="0dp"
         app:layout_constraintTop_toBottomOf="@id/progressBar"
-        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/bottomBar"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- Bottom Navigation Bar: back | forward | home | tabs | close-isolated -->
+    <LinearLayout
+        android:id="@+id/bottomBar"
+        android:layout_width="0dp"
+        android:layout_height="56dp"
+        android:orientation="horizontal"
+        android:background="@color/color_isolated_toolbar"
+        android:elevation="8dp"
+        android:gravity="center"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <!-- Back -->
+        <ImageButton
+            android:id="@+id/btnBack"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="match_parent"
+            android:background="?attr/selectableItemBackground"
+            android:src="@drawable/ic_arrow_back"
+            android:tint="@color/color_isolated_icon"
+            android:contentDescription="@string/back"
+            android:enabled="false"
+            android:alpha="0.35" />
+
+        <!-- Forward -->
+        <ImageButton
+            android:id="@+id/btnForward"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="match_parent"
+            android:background="?attr/selectableItemBackground"
+            android:src="@drawable/ic_arrow_forward"
+            android:tint="@color/color_isolated_icon"
+            android:contentDescription="@string/forward"
+            android:enabled="false"
+            android:alpha="0.35" />
+
+        <!-- Home -->
+        <ImageButton
+            android:id="@+id/btnHome"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="match_parent"
+            android:background="?attr/selectableItemBackground"
+            android:src="@drawable/ic_home"
+            android:tint="@color/color_isolated_icon"
+            android:contentDescription="@string/home" />
+
+        <!-- Tab picker (shows count of active isolated tabs) -->
+        <FrameLayout
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="match_parent">
+
+            <ImageButton
+                android:id="@+id/btnTabs"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="?attr/selectableItemBackground"
+                android:contentDescription="@string/tabs" />
+
+            <TextView
+                android:id="@+id/tvTabCount"
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:layout_gravity="center"
+                android:text="1"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:textColor="@color/color_isolated_icon"
+                android:gravity="center"
+                android:background="@drawable/bg_tab_count" />
+
+        </FrameLayout>
+
+        <!-- Close isolated tab / return to main browser -->
+        <ImageButton
+            android:id="@+id/btnClose"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="match_parent"
+            android:background="?attr/selectableItemBackground"
+            android:src="@drawable/ic_close"
+            android:tint="@color/color_isolated_icon"
+            android:contentDescription="@string/return_to_main" />
+
+    </LinearLayout>
 
     <!-- Fullscreen Container for video -->
     <FrameLayout

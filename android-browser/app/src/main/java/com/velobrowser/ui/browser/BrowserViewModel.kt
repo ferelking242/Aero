@@ -215,4 +215,14 @@ class BrowserViewModel @Inject constructor(
         isolatedTabManager.updateSlot(slot, url, title)
         tabManager.updateIsolatedTabBySlot(slot) { it.copy(url = url, title = title) }
     }
+
+    fun assignToGroup(tabId: String, groupId: String, groupName: String) {
+        tabManager.assignToGroup(tabId, groupId, groupName)
+    }
+
+    fun removeFromGroup(tabId: String) {
+        tabManager.removeFromGroup(tabId)
+    }
+
+    fun tabGroups(): List<Pair<String, String>> = tabManager.tabGroups()
 }

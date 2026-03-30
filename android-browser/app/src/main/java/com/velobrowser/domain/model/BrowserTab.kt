@@ -10,5 +10,7 @@ data class BrowserTab(
     val isIncognito: Boolean = false,
     val isIsolated: Boolean = false,
     val isolatedSlot: Int = 0,
-    val profileId: Long = 1L
+    val profileId: Long = 1L,
+    val groupId: String? = null,
+    val groupName: String? = null
 )

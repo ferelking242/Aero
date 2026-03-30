@@ -1,0 +1,319 @@
+Fix :
+We couldn't apply these changes automatically after several attempts.
+fix: correct Kotlin type mismatches in TLCodec and TelegramChannelService
+Task: Commit fixes for Kotlin compilation errors that caused GitHub Actions build to fail on commit eacd5ca.
+
+Changes committed:
+- ps2/src/main/kotlin/com/usbdiskmanager/ps2/telegram/TLCodec.kt
+- ps2/src/main/kotlin/com/usbdiskmanager/ps2/telegram/TelegramChannelService.kt
+
+The fixes were already applied to the files prior to this task. This task staged, committed, and pushed them to origin/master (GitHub).
+
+Push result: eacd5ca..80a060a master -> master
+
+No deviations from the task description. No additional code changes were made
+
+
+
+Ensuite notre procedur de téléchargement depuis telegram cest pas mieu de utilise TDlibs Ensuite réfléchis a notre telecharger quil soot le plus rapide efficae avec reprise possible.
+
+Chatgpt dit:
+Oui, là faut être clair :
+👉 si tu veux un téléchargement Telegram sérieux → TDLib est OBLIGATOIRE
+
+Ton raisonnement est bon, mais je vais corriger un truc important :
+
+
+---
+
+⚠️ ERREUR À NE PAS FAIRE
+
+👉 Beaucoup pensent :
+
+“je télécharge via lien Telegram”
+
+ou “je scrape”
+
+
+❌ Mauvaise approche
+
+
+---
+
+🔥 LA BONNE ARCHITECTURE (PRO)
+
+✔️ 1. TDLib = cœur du système
+
+👉 TDLib
+
+Pourquoi :
+
+téléchargement direct depuis serveurs Telegram
+
+multi-connexion CDN
+
+reprise automatique
+
+gestion des gros fichiers (ISO 4–50GB)
+
+
+👉 Aucun autre outil fait mieux
+
+
+---
+
+💣 TON OBJECTIF RÉEL
+
+Tu veux un downloader qui :
+
+⚡ rapide
+
+🔁 reprend après coupure
+
+📦 gère gros ISO
+
+🔄 s’intègre avec ton app
+
+
+👉 TDLib fait déjà 80% du boulot
+
+
+---
+
+🔥 MAIS… OPTIMISATION NÉCESSAIRE
+
+TDLib seul = bon
+TDLib bien configuré = ultra performant
+
+
+---
+
+🚀 ARCHITECTURE QUE TU DOIS IMPOSER
+
+🧠 Flow global
+
+1. Login Telegram
+
+
+2. Lister fichiers
+
+
+3. Download via TDLib
+
+
+4. Sauvegarde directe :
+
+
+
+/PS2Manager/ISO/
+
+5. Auto scan
+
+
+6. Conversion UL
+
+
+
+
+---
+
+⚡ OPTIMISATIONS CRITIQUES
+
+✔️ 1. Download parallèle (IMPORTANT)
+
+TDLib supporte :
+
+téléchargement en chunks
+
+CDN Telegram
+
+
+👉 MAIS tu dois :
+
+autoriser multi-download
+
+ne pas limiter à 1 thread
+
+
+
+---
+
+✔️ 2. PRIORITÉ FICHIERS
+
+Téléchargement intelligent :
+
+fichier sélectionné → priorité max
+
+autres → en attente
+
+
+
+---
+
+✔️ 3. REPRISE (TRÈS IMPORTANT)
+
+TDLib gère déjà :
+
+pause / resume
+
+crash recovery
+
+
+👉 MAIS tu dois :
+
+persister les downloads actifs (Room)
+
+reconnecter au restart
+
+
+
+---
+
+✔️ 4. ÉCRITURE DIRECT DISQUE
+
+👉 PAS de buffer énorme en RAM
+
+stream direct → fichier
+
+buffer 4MB max
+
+
+
+---
+
+✔️ 5. INTÉGRATION AVEC TON APP
+
+Dès que :
+
+download fini
+
+
+👉 trigger :
+
+scan ISO
+
+affichage auto
+
+
+
+---
+
+🔥 PROMPT ULTRA PRO À DONNER
+
+We need to build a high-performance Telegram downloader using TDLib.
+
+This must be optimized for large files (ISO 4GB–50GB).
+
+---
+
+# 🎯 OBJECTIVE
+
+Create a production-grade download system:
+- Fast
+- Resumable
+- Stable
+- Integrated with PS2 workflow
+
+---
+
+# ⚙️ CORE
+
+Use TDLib as the ONLY download engine.
+
+---
+
+# ⚡ FEATURES REQUIRED
+
+1. MULTI-DOWNLOAD SUPPORT
+- Allow multiple downloads
+- Prioritize active item
+
+2. RESUME SYSTEM
+- Persist active downloads in Room
+- On app restart → reattach to TDLib downloads
+
+3. STREAM TO FILE
+- Write directly to disk
+- No full file in memory
+
+4. PROGRESS TRACKING
+- % progress
+- Speed (MB/s)
+- ETA
+
+5. ERROR HANDLING
+- Network loss → auto retry
+- App kill → resume
+
+---
+
+# 📂 STORAGE
+
+Save to:
+
+/PS2Manager/ISO/
+
+---
+
+# 🔗 INTEGRATION
+
+After download completes:
+- Trigger ISO scan
+- Add game to list automatically
+
+---
+
+# ⚠️ PERFORMANCE RULES
+
+- No UI blocking
+- Use coroutines
+- Efficient threading
+- Handle 50GB+ files
+
+---
+
+# 🎯 GOAL
+
+A downloader comparable to:
+- Telegram official app
+BUT specialized for large game files
+
+Fast, stable, resumable, seamless
+
+
+---
+
+💣 RÉSUMÉ CLAIR
+
+👉 Aria2 → inutile ici
+👉 TDLib → obligatoire
+👉 Optimisation → clé
+
+
+---
+
+🧠 CONSEIL FINAL
+
+👉 Si tu fais ça bien :
+
+ton app devient :
+
+downloader
+
+manager ISO
+
+convertisseur UL
+
+
+
+👉 = outil complet unique Android
+
+
+---
+
+Si tu veux, prochaine étape je peux te faire :
+
+👉 un système “queue intelligente” (comme IDM)
+👉 ou limiter vitesse / priorités / auto retry avancé
+
+Et là tu dépasses même Telegram en UX.
