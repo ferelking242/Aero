@@ -31,9 +31,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.usbdiskmanager.ps2.data.download.TgDownloadStatus
 import com.usbdiskmanager.ps2.domain.model.OutputDestination
 import com.usbdiskmanager.ps2.ui.components.BatchConversionDialog
 import com.usbdiskmanager.ps2.ui.components.ConversionDialog
@@ -89,6 +92,15 @@ fun Ps2StudioScreen(
     }
 
     var showBatchDialog by remember { mutableStateOf(false) }
+    var showDownloadManager by remember { mutableStateOf(false) }
+
+    // Download manager bottom sheet
+    if (showDownloadManager) {
+        DownloadManagerSheet(
+            downloads = uiState.telegramState.downloads,
+            onDismiss = { showDownloadManager = false }
+        )
+    }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -114,6 +126,27 @@ fun Ps2StudioScreen(
                         )
                     },
                     actions = {
+                        // ── Download Manager icon (always visible) ──
+                        val activeDownloads = uiState.telegramState.downloads.values.count {
+                            it.status == TgDownloadStatus.DOWNLOADING || it.status == TgDownloadStatus.QUEUED
+                        }
+                        BadgedBox(
+                            badge = {
+                                if (activeDownloads > 0) {
+                                    Badge { Text("$activeDownloads") }
+                                }
+                            }
+                        ) {
+                            IconButton(onClick = { showDownloadManager = true }) {
+                                Icon(
+                                    Icons.Default.Downloading,
+                                    contentDescription = "Gestionnaire de téléchargements",
+                                    tint = if (activeDownloads > 0) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+
                         // Multi-select toggle
                         if (uiState.selectedTab == Ps2Tab.GAMES) {
                             IconButton(onClick = viewModel::toggleMultiSelectMode) {
@@ -454,6 +487,184 @@ private fun EmptyState(modifier: Modifier = Modifier, onPickFolder: () -> Unit) 
             Icon(Icons.Default.FolderOpen, contentDescription = null)
             Spacer(Modifier.width(8.dp))
             Text("Choisir un dossier")
+        }
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Download Manager Bottom Sheet
+// ──────────────────────────────────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DownloadManagerSheet(
+    downloads: Map<String, com.usbdiskmanager.ps2.data.download.TgDownloadProgress>,
+    onDismiss: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "Gestionnaire de téléchargements",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                val total = downloads.size
+                val active = downloads.values.count {
+                    it.status == TgDownloadStatus.DOWNLOADING || it.status == TgDownloadStatus.QUEUED
+                }
+                if (total > 0) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        shape = RoundedCornerShape(20.dp)
+                    ) {
+                        Text(
+                            "$active actif · $total total",
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                }
+            }
+
+            if (downloads.isEmpty()) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        Icons.Default.DownloadDone,
+                        null,
+                        modifier = Modifier.size(52.dp),
+                        tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        "Aucun téléchargement",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            } else {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(bottom = 32.dp)
+                ) {
+                    val sorted = downloads.entries.sortedWith(
+                        compareBy {
+                            when (it.value.status) {
+                                TgDownloadStatus.DOWNLOADING -> 0
+                                TgDownloadStatus.QUEUED -> 1
+                                TgDownloadStatus.ERROR -> 2
+                                TgDownloadStatus.DONE -> 3
+                                else -> 4
+                            }
+                        }
+                    )
+                    items(sorted, key = { it.key }) { (id, prog) ->
+                        DownloadRow(downloadId = id, progress = prog)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DownloadRow(
+    downloadId: String,
+    progress: com.usbdiskmanager.ps2.data.download.TgDownloadProgress
+) {
+    val statusColor = when (progress.status) {
+        TgDownloadStatus.DONE -> Color(0xFF4CAF50)
+        TgDownloadStatus.ERROR -> MaterialTheme.colorScheme.error
+        TgDownloadStatus.DOWNLOADING -> Color(0xFF0088CC)
+        TgDownloadStatus.QUEUED -> MaterialTheme.colorScheme.onSurfaceVariant
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val statusIcon = when (progress.status) {
+        TgDownloadStatus.DONE -> Icons.Default.CheckCircle
+        TgDownloadStatus.ERROR -> Icons.Default.Error
+        TgDownloadStatus.DOWNLOADING -> Icons.Default.Downloading
+        TgDownloadStatus.QUEUED -> Icons.Default.Schedule
+        else -> Icons.Default.HourglassEmpty
+    }
+
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(statusIcon, null, tint = statusColor, modifier = Modifier.size(18.dp))
+                Text(
+                    progress.fileName.ifBlank { downloadId.takeLast(20) },
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                if (progress.status == TgDownloadStatus.DOWNLOADING || progress.status == TgDownloadStatus.QUEUED) {
+                    Text(
+                        progress.speedFormatted,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFF0088CC),
+                        fontSize = 10.sp
+                    )
+                }
+            }
+
+            if (progress.status == TgDownloadStatus.DOWNLOADING) {
+                Spacer(Modifier.height(6.dp))
+                LinearProgressIndicator(
+                    progress = { progress.fraction },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp)),
+                    color = Color(0xFF0088CC)
+                )
+                Spacer(Modifier.height(3.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        "%.1f%%".format(progress.fraction * 100),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (progress.etaSeconds > 0) {
+                        val eta = if (progress.etaSeconds > 60)
+                            "${progress.etaSeconds / 60}m ${progress.etaSeconds % 60}s"
+                        else "${progress.etaSeconds}s"
+                        Text("ETA $eta", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                    }
+                }
+            } else if (progress.status == TgDownloadStatus.ERROR && progress.error != null) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    progress.error,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }

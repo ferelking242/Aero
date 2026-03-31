@@ -36,6 +36,7 @@ data class TelegramGamePost(
     val fileReference: ByteArray = ByteArray(0),
     val dcId: Int = 0,
     val coverPhotoId: Long = 0L,
+    val thumbnailUrl: String? = null,
     val date: Int = 0
 ) {
     val isIso
@@ -242,6 +243,8 @@ class TelegramChannelService @Inject constructor(
             Regex("""tgme_widget_message_document_title[^>]*>([^<]+)<""")
         val docSizePattern =
             Regex("""tgme_widget_message_document_extra[^>]*>([^<]+)<""")
+        val photoPattern =
+            Regex("""tgme_widget_message_photo_wrap[^"]*"[^>]*style="background-image:url\('([^']+)'\)""")
 
         for (match in msgPattern.findAll(html)) {
             val msgId = match.groupValues[1].toIntOrNull() ?: continue
@@ -273,6 +276,7 @@ class TelegramChannelService @Inject constructor(
                 docName.endsWith(".zip", true) -> "application/zip"
                 else -> "application/octet-stream"
             }
+            val thumbUrl = photoPattern.find(body)?.groupValues?.get(1)?.takeIf { it.isNotBlank() }
 
             posts.add(
                 TelegramGamePost(
@@ -285,6 +289,7 @@ class TelegramChannelService @Inject constructor(
                     fileName = docName,
                     fileSizeBytes = sizeBytes,
                     mimeType = mime,
+                    thumbnailUrl = thumbUrl,
                     date = 0
                 )
             )

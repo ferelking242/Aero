@@ -7,6 +7,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,7 +21,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -29,6 +34,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
 import com.usbdiskmanager.ps2.data.download.TelegramDownloadManager
 import com.usbdiskmanager.ps2.data.download.TgDownloadProgress
 import com.usbdiskmanager.ps2.data.download.TgDownloadStatus
@@ -368,6 +374,7 @@ private fun TelegramBrowserScreen(viewModel: Ps2ViewModel, tgState: TelegramUiSt
     var showAddChannel by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf<TelegramChannelConfig?>(null) }
     var showDisconnectConfirm by remember { mutableStateOf(false) }
+    var isGridView by remember { mutableStateOf(true) }
     val uriHandler = LocalUriHandler.current
 
     if (showAddChannel) {
@@ -430,6 +437,12 @@ private fun TelegramBrowserScreen(viewModel: Ps2ViewModel, tgState: TelegramUiSt
                         "${tgState.channels.size} canal(aux) • ${tgState.allPosts.size} jeux indexés • TDLib",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.White.copy(alpha = 0.8f)
+                    )
+                }
+                IconButton(onClick = { isGridView = !isGridView }) {
+                    Icon(
+                        if (isGridView) Icons.Default.ViewList else Icons.Default.GridView,
+                        null, tint = Color.White
                     )
                 }
                 IconButton(onClick = { viewModel.refreshTelegramPosts() }) {
@@ -515,41 +528,88 @@ private fun TelegramBrowserScreen(viewModel: Ps2ViewModel, tgState: TelegramUiSt
                 }
             }
         } else {
-            LazyColumn(
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.weight(1f)
+            // ── Compteur + CDN label ──
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("${displayPosts.size} jeu(x) disponible(s)", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                        Text("TDLib — multi-connexion CDN", style = MaterialTheme.typography.labelSmall, color = Color(0xFF0088CC))
+                Text(
+                    "${displayPosts.size} jeu(x) disponible(s)",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    "TDLib — CDN",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFF0088CC)
+                )
+            }
+
+            if (isGridView) {
+                // ── Vue grille 2x2 ──
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    items(displayPosts, key = { "${it.channelUsername}_${it.messageId}" }) { post ->
+                        val dlId = TelegramDownloadManager.downloadId(post.channelUsername, post.messageId)
+                        val dlProgress = tgState.downloads[dlId]
+                        TelegramGameGridCard(
+                            post = post,
+                            downloadProgress = dlProgress,
+                            onDownload = { viewModel.downloadTelegramGame(post) },
+                            onCancel = { viewModel.cancelTelegramDownload(dlId) },
+                            onOpenTelegram = { uriHandler.openUri("https://t.me/${post.channelUsername}/${post.messageId}") }
+                        )
+                    }
+                    item {
+                        tgState.selectedChannel?.let { ch ->
+                            TextButton(
+                                onClick = { viewModel.loadMoreTelegramPosts(ch, displayPosts.lastOrNull()?.messageId ?: 0) },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(Icons.Default.ExpandMore, null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Plus")
+                            }
+                        }
                     }
                 }
-                items(displayPosts, key = { "${it.channelUsername}_${it.messageId}" }) { post ->
-                    val dlId = TelegramDownloadManager.downloadId(post.channelUsername, post.messageId)
-                    val dlProgress = tgState.downloads[dlId]
-                    TelegramGameCard(
-                        post = post,
-                        downloadProgress = dlProgress,
-                        onDownload = { viewModel.downloadTelegramGame(post) },
-                        onCancel = { viewModel.cancelTelegramDownload(dlId) },
-                        onOpenTelegram = { uriHandler.openUri("https://t.me/${post.channelUsername}/${post.messageId}") }
-                    )
-                }
-                item {
-                    tgState.selectedChannel?.let { ch ->
-                        TextButton(
-                            onClick = { viewModel.loadMoreTelegramPosts(ch, displayPosts.lastOrNull()?.messageId ?: 0) },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Icon(Icons.Default.ExpandMore, null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("Charger plus")
+            } else {
+                // ── Vue liste ──
+                LazyColumn(
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    items(displayPosts, key = { "${it.channelUsername}_${it.messageId}" }) { post ->
+                        val dlId = TelegramDownloadManager.downloadId(post.channelUsername, post.messageId)
+                        val dlProgress = tgState.downloads[dlId]
+                        TelegramGameCard(
+                            post = post,
+                            downloadProgress = dlProgress,
+                            onDownload = { viewModel.downloadTelegramGame(post) },
+                            onCancel = { viewModel.cancelTelegramDownload(dlId) },
+                            onOpenTelegram = { uriHandler.openUri("https://t.me/${post.channelUsername}/${post.messageId}") }
+                        )
+                    }
+                    item {
+                        tgState.selectedChannel?.let { ch ->
+                            TextButton(
+                                onClick = { viewModel.loadMoreTelegramPosts(ch, displayPosts.lastOrNull()?.messageId ?: 0) },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(Icons.Default.ExpandMore, null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Charger plus")
+                            }
                         }
                     }
                 }
@@ -685,6 +745,183 @@ private fun TelegramGameCard(
                 }
                 FilledTonalIconButton(onClick = onOpenTelegram, modifier = Modifier.size(36.dp)) {
                     Icon(Icons.Default.OpenInNew, "Ouvrir Telegram", modifier = Modifier.size(16.dp))
+                }
+            }
+        }
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Grid card (2x2 layout with thumbnail photo)
+// ──────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun TelegramGameGridCard(
+    post: TelegramGamePost,
+    downloadProgress: TgDownloadProgress?,
+    onDownload: () -> Unit,
+    onCancel: () -> Unit,
+    onOpenTelegram: () -> Unit
+) {
+    val isActive = downloadProgress?.status == TgDownloadStatus.DOWNLOADING ||
+        downloadProgress?.status == TgDownloadStatus.QUEUED
+    val isDone = downloadProgress?.status == TgDownloadStatus.DONE
+
+    Card(
+        shape = RoundedCornerShape(14.dp),
+        modifier = Modifier.fillMaxWidth().animateContentSize()
+    ) {
+        Box(modifier = Modifier.fillMaxWidth()) {
+            // ── Thumbnail / placeholder ──
+            if (!post.thumbnailUrl.isNullOrBlank()) {
+                AsyncImage(
+                    model = post.thumbnailUrl,
+                    contentDescription = post.title,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(130.dp)
+                        .clip(RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp))
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(130.dp)
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(Color(0xFF0D1B2A), Color(0xFF1A3550))
+                            ),
+                            RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            Icons.Default.VideogameAsset,
+                            null,
+                            tint = Color(0xFF0088CC).copy(alpha = 0.6f),
+                            modifier = Modifier.size(42.dp)
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            post.fileName.substringAfterLast('.').uppercase(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFF0088CC).copy(alpha = 0.8f),
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+
+            // ── Download button overlay (top-right) ──
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(6.dp)
+            ) {
+                if (!isDone && !isActive) {
+                    FilledTonalIconButton(
+                        onClick = onDownload,
+                        modifier = Modifier.size(32.dp),
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = Color(0xFF0088CC)
+                        )
+                    ) {
+                        Icon(Icons.Default.Download, null, modifier = Modifier.size(17.dp), tint = Color.White)
+                    }
+                } else if (isActive) {
+                    FilledTonalIconButton(
+                        onClick = onCancel,
+                        modifier = Modifier.size(32.dp),
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        )
+                    ) {
+                        Icon(Icons.Default.Stop, null, modifier = Modifier.size(17.dp), tint = MaterialTheme.colorScheme.error)
+                    }
+                } else {
+                    // done
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .background(Color(0xFF4CAF50), RoundedCornerShape(50)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(17.dp))
+                    }
+                }
+            }
+
+            // ── Region badge overlay (top-left) ──
+            if (post.region.isNotBlank()) {
+                Box(modifier = Modifier.align(Alignment.TopStart).padding(6.dp)) {
+                    RegionBadge(post.region)
+                }
+            }
+        }
+
+        // ── Info bar below image ──
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 8.dp)
+        ) {
+            Text(
+                post.title.ifBlank { "Jeu PS2 #${post.messageId}" },
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                lineHeight = 15.sp
+            )
+            Spacer(Modifier.height(3.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    post.sizeFormatted,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
+                Text(
+                    "@${post.channelUsername}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFF0088CC),
+                    fontSize = 9.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            // ── Progress bar ──
+            downloadProgress?.let { prog ->
+                Spacer(Modifier.height(5.dp))
+                when {
+                    prog.status == TgDownloadStatus.DONE -> {
+                        Text("Téléchargé ✓", style = MaterialTheme.typography.labelSmall, color = Color(0xFF4CAF50))
+                    }
+                    prog.status == TgDownloadStatus.ERROR -> {
+                        Text("Erreur", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error, maxLines = 1)
+                    }
+                    else -> {
+                        Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("%.0f%%".format(prog.fraction * 100), style = MaterialTheme.typography.labelSmall, color = Color(0xFF0088CC), fontWeight = FontWeight.Bold)
+                                Text(prog.speedFormatted, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                            }
+                            LinearProgressIndicator(
+                                progress = { prog.fraction },
+                                modifier = Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp)),
+                                color = Color(0xFF0088CC)
+                            )
+                        }
+                    }
                 }
             }
         }
