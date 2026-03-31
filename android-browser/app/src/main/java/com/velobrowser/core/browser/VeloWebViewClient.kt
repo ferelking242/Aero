@@ -32,7 +32,22 @@ class VeloWebViewClient(
 
     override fun onPageFinished(view: WebView, url: String) {
         super.onPageFinished(view, url)
+        view.evaluateJavascript(VISIBILITY_KEEP_ALIVE_JS, null)
         onPageFinished(url, view.title ?: url)
+    }
+
+    companion object {
+        private const val VISIBILITY_KEEP_ALIVE_JS = """
+            (function() {
+                try {
+                    Object.defineProperty(document, 'hidden', { get: function() { return false; }, configurable: true });
+                    Object.defineProperty(document, 'visibilityState', { get: function() { return 'visible'; }, configurable: true });
+                    document.hasFocus = function() { return true; };
+                    window.onblur = null;
+                    window.onfocus = null;
+                } catch(e) {}
+            })();
+        """
     }
 
     override fun onReceivedError(
