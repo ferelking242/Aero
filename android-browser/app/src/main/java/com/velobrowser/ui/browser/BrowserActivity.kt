@@ -382,7 +382,7 @@ class BrowserActivity : AppCompatActivity() {
 
         collectFlow(viewModel.clearDataEvent) {
             webViews.values.forEach { wv -> wv.clearCache(true) }
-            toast(getString(R.string.data_cleared))
+            toast(getString(R.string.cache_cleared))
         }
     }
 

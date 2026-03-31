@@ -42,6 +42,9 @@ class BrowserViewModel @Inject constructor(
     private val _openIsolatedTabEvent = MutableSharedFlow<Pair<Int, String>>()
     val openIsolatedTabEvent: SharedFlow<Pair<Int, String>> = _openIsolatedTabEvent.asSharedFlow()
 
+    private val _clearDataEvent = MutableSharedFlow<Unit>()
+    val clearDataEvent: SharedFlow<Unit> = _clearDataEvent.asSharedFlow()
+
     private val _pageProgress = MutableStateFlow(0)
     val pageProgress: StateFlow<Int> = _pageProgress.asStateFlow()
 
