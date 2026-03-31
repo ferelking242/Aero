@@ -36,6 +36,10 @@ class IsoScanner @Inject constructor(
         val DEFAULT_ART_DIR: String
             get() = "$BASE_DIR/ART"
 
+        /** Archives (.zip .rar .7z) that still need extraction before use in PCSX2. */
+        val ARCHIVE_DIR: String
+            get() = "$BASE_DIR/Archives"
+
         private val PS2_ID_REGEX = Regex(
             "^(SLES|SCES|SLUS|SCUS|SLED|SCED|SLPM|SLPS|SCPS|SCAJ|SLAJ|SLKA|SCKA|PBPX)[-_]?\\d",
             RegexOption.IGNORE_CASE

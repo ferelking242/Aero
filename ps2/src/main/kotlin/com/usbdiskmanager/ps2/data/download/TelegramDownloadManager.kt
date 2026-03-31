@@ -76,7 +76,16 @@ class TelegramDownloadManager @Inject constructor(
             if (existing?.status == TgDownloadStatus.DONE) return@launch
             if (activeJobs[id]?.isActive == true) return@launch
 
-            val destDir  = File(IsoScanner.BASE_DIR).also { it.mkdirs() }
+            // Route to Archives/ for compressed files, ISO/ for ready-to-play images
+            val firstExt = post.fileParts.firstOrNull()?.fileExtension ?: ""
+            val destDir  = when (firstExt) {
+                ".rar", ".7z", ".zip" ->
+                    File(IsoScanner.ARCHIVE_DIR).also { it.mkdirs() }
+                ".iso", ".bin", ".chd" ->
+                    File(IsoScanner.DEFAULT_ISO_DIR).also { it.mkdirs() }
+                else ->
+                    File(IsoScanner.BASE_DIR).also { it.mkdirs() }
+            }
             val entity   = TelegramDownloadEntity(
                 id                  = id,
                 channelUsername     = post.channelUsername,

@@ -375,14 +375,15 @@ class TelegramChannelService @Inject constructor(
                     }
 
                     is TdApi.MessageDocument -> {
-                        val doc      = content.document ?: run { j++; continue }
+                        val doc = content.document
+                        if (doc == null) { j++; continue }
                         val fileName = doc.fileName?.takeIf { it.isNotBlank() }
-                            ?: run { j++; continue }
+                        if (fileName == null) { j++; continue }
                         val ext = fileExtension(fileName)
                         // Must be a game format
-                        if (ext !in TelegramGamePost.GAME_EXTENSIONS)    { j++; continue }
+                        if (ext !in TelegramGamePost.GAME_EXTENSIONS) { j++; continue }
                         // Must be big enough to be a real game (not a tiny attachment)
-                        if (doc.document.size < MIN_GAME_FILE_BYTES)     { j++; continue }
+                        if (doc.document.size < MIN_GAME_FILE_BYTES)  { j++; continue }
 
                         fileParts.add(
                             TelegramFilePart(
@@ -623,7 +624,6 @@ class TelegramChannelService @Inject constructor(
 
     private fun isServiceMessage(msg: TdApi.Message): Boolean =
         when (msg.content) {
-            is TdApi.MessageChatPinMessage,
             is TdApi.MessagePinMessage,
             is TdApi.MessageChatJoinByLink,
             is TdApi.MessageChatAddMembers,
