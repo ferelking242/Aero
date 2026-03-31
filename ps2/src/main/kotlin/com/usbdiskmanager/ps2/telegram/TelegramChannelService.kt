@@ -128,6 +128,7 @@ private const val KEY_CHANNELS = "channels"
 private const val KEY_PHONE    = "phone"
 
 private val DEFAULT_CHANNELS = listOf(
+    TelegramChannelConfig("opens_ps2", "Opens PS2"),
     TelegramChannelConfig("pcsx2iso", "Playstation 2 Roms"),
     TelegramChannelConfig("ps2isodl", "PS2 ISO Downloads"),
     TelegramChannelConfig("PSXGames", "PSX / PS2 Games")
@@ -309,22 +310,28 @@ class TelegramChannelService @Inject constructor(
             // Cover photo logic:
             //   Case A: the anchor IS a photo (caption = metadata) → cover = this photo
             //   Case B: anchor is a text message → look backward up to 5 msgs for a photo
-            var coverFileId = 0
+            var coverFileId    = 0
+            var coverCaption   = ""   // title from cover photo caption (fallback)
             if (msg.content is TdApi.MessagePhoto) {
                 coverFileId = extractPhotoThumbnailId(msg)
             } else {
                 for (j in (i - 1) downTo maxOf(0, i - 5)) {
-                    val prev = messages[j]
-                    if (prev.content is TdApi.MessagePhoto &&
-                        !hasGameMetadata(extractMessageText(prev))) {
-                        coverFileId = extractPhotoThumbnailId(prev)
+                    val prev     = messages[j]
+                    val prevText = extractMessageText(prev)
+                    if (prev.content is TdApi.MessagePhoto && !hasGameMetadata(prevText)) {
+                        coverFileId  = extractPhotoThumbnailId(prev)
+                        // The photo caption is often the game title (e.g. opens_ps2 channel)
+                        coverCaption = prevText.trim()
                         break
                     }
                 }
             }
 
             // Parse all metadata fields from the anchor text
-            val title       = parseTitle(msgText)
+            // If the anchor text has no title line (starts directly with "Console :"),
+            // fall back to the cover photo's caption (used in channels like opens_ps2).
+            val rawTitle = parseTitle(msgText)
+            val title    = rawTitle.ifBlank { coverCaption.take(100) }
             val genre       = parseField(msgText, "Genre")
             val series      = parseField(msgText, "Series")
             val region      = parseRegion(msgText)
