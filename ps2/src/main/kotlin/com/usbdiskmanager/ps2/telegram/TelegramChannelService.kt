@@ -7,6 +7,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import org.drinkless.tdlib.TdApi
 import timber.log.Timber
 import javax.inject.Inject
@@ -37,6 +38,10 @@ data class TelegramGamePost(
     val dcId: Int = 0,
     val coverPhotoId: Long = 0L,
     val thumbnailUrl: String? = null,
+    // TDLib native fields (populated when fetched via TDLib, 0 when web-scraped)
+    val tdlibMessageId: Long = 0L,
+    val tdlibChatId: Long = 0L,
+    val thumbnailFileId: Int = 0,
     val date: Int = 0
 ) {
     val isIso
@@ -203,6 +208,85 @@ class TelegramChannelService @Inject constructor(
     fun removeChannel(username: String) {
         saveChannels(getSavedChannels().filter { it.username != username })
     }
+
+    // ── TDLib native channel indexing (when authenticated) ────────────────────
+
+    /**
+     * Fetch up to [limit] game posts from a channel using TDLib directly.
+     * [fromTdlibId] = 0 means "start from the latest message".
+     * Returns posts sorted newest-first.
+     */
+    suspend fun fetchChannelPostsTDLib(
+        channelUsername: String,
+        fromTdlibId: Long = 0L,
+        limit: Int = 50
+    ): List<TelegramGamePost> = kotlinx.coroutines.withContext(Dispatchers.IO) {
+        val chat = tdlib.searchPublicChat(channelUsername)
+        val messages = tdlib.getChatHistory(chat.id, fromTdlibId, limit)
+        val result = mutableListOf<TelegramGamePost>()
+        for (msg in messages.messages ?: emptyArray()) {
+            parseTdlibMessage(msg, channelUsername, chat.id)?.let { result.add(it) }
+        }
+        result
+    }
+
+    private fun parseTdlibMessage(
+        msg: TdApi.Message,
+        channelUsername: String,
+        chatId: Long
+    ): TelegramGamePost? {
+        val docContent = msg.content as? TdApi.MessageDocument ?: return null
+        val doc = docContent.document
+        val fileName = doc.fileName?.takeIf { it.isNotBlank() } ?: return null
+        if (GAME_EXTENSIONS.none { fileName.endsWith(it, ignoreCase = true) }) return null
+
+        val caption = docContent.caption?.text ?: ""
+        if (isSpam(caption)) return null
+
+        // In TDLib, channel message IDs are: postNumber << 20
+        val urlPostNumber = (msg.id ushr 20).toInt().coerceAtLeast(msg.id.toInt())
+
+        // Thumbnail: use cached local path if already downloaded, otherwise store fileId
+        val thumb = doc.thumbnail
+        val thumbFileId = thumb?.file?.id ?: 0
+        val thumbLocal = thumb?.file?.local
+        val thumbUrl = if (thumbLocal != null && thumbLocal.isDownloadingCompleted && thumbLocal.path.isNotBlank())
+            "file://${thumbLocal.path}"
+        else null
+
+        val combined = "$caption $fileName"
+        return TelegramGamePost(
+            messageId = urlPostNumber,
+            channelUsername = channelUsername,
+            title = extractTitle(caption, fileName),
+            description = caption.take(300),
+            region = extractRegion(combined),
+            gameId = extractGameId(combined),
+            fileName = fileName,
+            fileSizeBytes = doc.document.size,
+            mimeType = doc.mimeType ?: "application/octet-stream",
+            documentId = doc.document.id.toLong(),
+            thumbnailUrl = thumbUrl,
+            thumbnailFileId = thumbFileId,
+            tdlibMessageId = msg.id,
+            tdlibChatId = chatId,
+            date = msg.date
+        )
+    }
+
+    /**
+     * Downloads a TDLib file (thumbnail) and returns its local file path,
+     * or null if it fails or is already not available.
+     */
+    suspend fun downloadThumbnail(fileId: Int): String? = runCatching {
+        val file = tdlib.startDownload(fileId, priority = 1)
+        if (file.local.isDownloadingCompleted && file.local.path.isNotBlank())
+            return file.local.path
+        // Wait for the file to finish downloading via file update events
+        val update = tdlib.fileUpdates
+            .first { it.file.id == fileId && it.file.local.isDownloadingCompleted }
+        update.file.local.path.takeIf { it.isNotBlank() }
+    }.getOrNull()
 
     // ── Web scraping (browse, no auth) ────────────────────────────────────────
 

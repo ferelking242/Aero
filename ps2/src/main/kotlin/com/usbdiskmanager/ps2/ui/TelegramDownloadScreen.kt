@@ -434,7 +434,10 @@ private fun TelegramBrowserScreen(viewModel: Ps2ViewModel, tgState: TelegramUiSt
                         style = MaterialTheme.typography.titleSmall
                     )
                     Text(
-                        "${tgState.channels.size} canal(aux) • ${tgState.allPosts.size} jeux indexés • TDLib",
+                        buildString {
+                            append("${tgState.channels.size} canal(aux) • ${tgState.allPosts.size} jeux")
+                            if (tgState.usingTDLib) append(" • TDLib natif ⚡") else append(" • Web")
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.White.copy(alpha = 0.8f)
                     )
@@ -543,7 +546,7 @@ private fun TelegramBrowserScreen(viewModel: Ps2ViewModel, tgState: TelegramUiSt
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    "TDLib — CDN",
+                    if (tgState.usingTDLib) "TDLib natif ⚡" else "Web",
                     style = MaterialTheme.typography.labelSmall,
                     color = Color(0xFF0088CC)
                 )

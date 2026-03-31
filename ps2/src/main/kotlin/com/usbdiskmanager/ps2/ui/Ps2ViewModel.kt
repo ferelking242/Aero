@@ -111,7 +111,10 @@ data class TelegramUiState(
     val allPosts: List<TelegramGamePost> = emptyList(),
     val isLoading: Boolean = false,
     val error: String? = null,
-    val downloads: Map<String, TgDownloadProgress> = emptyMap()
+    val downloads: Map<String, TgDownloadProgress> = emptyMap(),
+    val usingTDLib: Boolean = false,
+    // Last TDLib message ID per channel, used for "load more" pagination
+    val lastTdlibIdByChannel: Map<String, Long> = emptyMap()
 )
 
 @HiltViewModel
@@ -893,13 +896,29 @@ class Ps2ViewModel @Inject constructor(
     fun refreshTelegramPosts() {
         val channels = _uiState.value.telegramState.channels
         if (channels.isEmpty()) return
-        _uiState.update { s -> s.copy(telegramState = s.telegramState.copy(isLoading = true, error = null)) }
+        val useTDLib = telegramService.getSetupState() is TelegramSetupState.Ready
+        _uiState.update { s ->
+            s.copy(telegramState = s.telegramState.copy(
+                isLoading = true,
+                error = null,
+                usingTDLib = useTDLib,
+                lastTdlibIdByChannel = emptyMap()
+            ))
+        }
         viewModelScope.launch {
             val allPosts = mutableListOf<TelegramGamePost>()
+            val lastIds = mutableMapOf<String, Long>()
             channels.forEach { chan ->
                 try {
-                    val posts = telegramService.fetchChannelPostsWeb(chan.username)
+                    val posts = if (useTDLib) {
+                        telegramService.fetchChannelPostsTDLib(chan.username, fromTdlibId = 0L)
+                    } else {
+                        telegramService.fetchChannelPostsWeb(chan.username)
+                    }
                     allPosts.addAll(posts)
+                    posts.lastOrNull()?.tdlibMessageId?.takeIf { it > 0L }?.let {
+                        lastIds[chan.username] = it
+                    }
                 } catch (e: Exception) {
                     Timber.e(e, "Failed to load channel ${chan.username}")
                 }
@@ -907,35 +926,82 @@ class Ps2ViewModel @Inject constructor(
             _uiState.update { s ->
                 s.copy(telegramState = s.telegramState.copy(
                     allPosts = allPosts.sortedByDescending { it.date },
-                    isLoading = false
+                    isLoading = false,
+                    lastTdlibIdByChannel = lastIds
                 ))
             }
+            if (useTDLib) loadThumbnailsInBackground(allPosts)
         }
     }
 
     fun loadMoreTelegramPosts(channelUsername: String, beforeId: Int) {
-        loadChannelPosts(channelUsername, beforeId)
+        val useTDLib = telegramService.getSetupState() is TelegramSetupState.Ready
+        val fromTdlibId = if (useTDLib)
+            _uiState.value.telegramState.lastTdlibIdByChannel[channelUsername] ?: 0L
+        else 0L
+        loadChannelPosts(channelUsername, beforeId, fromTdlibId, useTDLib)
     }
 
-    private fun loadChannelPosts(channelUsername: String, beforeId: Int) {
+    private fun loadChannelPosts(
+        channelUsername: String,
+        beforeId: Int,
+        fromTdlibId: Long = 0L,
+        useTDLib: Boolean = false
+    ) {
         _uiState.update { s -> s.copy(telegramState = s.telegramState.copy(isLoading = true)) }
         viewModelScope.launch {
             try {
-                val posts = telegramService.fetchChannelPostsWeb(channelUsername, beforeId)
+                val posts = if (useTDLib) {
+                    telegramService.fetchChannelPostsTDLib(channelUsername, fromTdlibId)
+                } else {
+                    telegramService.fetchChannelPostsWeb(channelUsername, beforeId)
+                }
                 _uiState.update { s ->
                     val existing = s.telegramState.allPosts
-                        .filter { it.channelUsername != channelUsername || beforeId == 0 }
+                        .filter { it.channelUsername != channelUsername || (beforeId == 0 && fromTdlibId == 0L) }
+                    val newLastId = posts.lastOrNull()?.tdlibMessageId?.takeIf { it > 0L }
+                    val newLastIds = if (newLastId != null)
+                        s.telegramState.lastTdlibIdByChannel + (channelUsername to newLastId)
+                    else s.telegramState.lastTdlibIdByChannel
                     s.copy(telegramState = s.telegramState.copy(
                         allPosts = (existing + posts).sortedByDescending { it.date },
-                        isLoading = false
+                        isLoading = false,
+                        lastTdlibIdByChannel = newLastIds
                     ))
                 }
+                if (useTDLib) loadThumbnailsInBackground(posts)
             } catch (e: Exception) {
                 _uiState.update { s ->
                     s.copy(telegramState = s.telegramState.copy(
                         isLoading = false,
                         error = "Erreur canal @$channelUsername: ${e.message}"
                     ))
+                }
+            }
+        }
+    }
+
+    /** Downloads thumbnails for posts that have a thumbnailFileId but no thumbnailUrl yet. */
+    private fun loadThumbnailsInBackground(posts: List<TelegramGamePost>) {
+        val pending = posts.filter { it.thumbnailFileId > 0 && it.thumbnailUrl == null }
+        if (pending.isEmpty()) return
+        viewModelScope.launch {
+            pending.forEach { post ->
+                try {
+                    val file = telegramService.downloadThumbnail(post.thumbnailFileId)
+                    if (file != null) {
+                        _uiState.update { s ->
+                            s.copy(telegramState = s.telegramState.copy(
+                                allPosts = s.telegramState.allPosts.map { p ->
+                                    if (p.channelUsername == post.channelUsername && p.messageId == post.messageId)
+                                        p.copy(thumbnailUrl = "file://$file")
+                                    else p
+                                }
+                            ))
+                        }
+                    }
+                } catch (e: Exception) {
+                    Timber.d("Thumbnail skipped for ${post.fileName}: ${e.message}")
                 }
             }
         }
