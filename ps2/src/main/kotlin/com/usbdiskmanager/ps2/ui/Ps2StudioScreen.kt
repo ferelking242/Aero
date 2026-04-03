@@ -1,6 +1,5 @@
 package com.usbdiskmanager.ps2.ui
 
-import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -21,7 +20,6 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -40,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.usbdiskmanager.ps2.data.cover.CoverType
 import com.usbdiskmanager.ps2.data.download.TgDownloadStatus
 import com.usbdiskmanager.ps2.domain.model.OutputDestination
 import com.usbdiskmanager.ps2.ui.components.BatchConversionDialog
@@ -128,6 +127,7 @@ fun Ps2StudioScreen(
                         )
                     },
                     actions = {
+                        // ── Always visible: Download badge ─────────────────────
                         val activeDownloads = uiState.telegramState.downloads.values.count {
                             it.status == TgDownloadStatus.DOWNLOADING || it.status == TgDownloadStatus.QUEUED
                         }
@@ -141,7 +141,7 @@ fun Ps2StudioScreen(
                             IconButton(onClick = { showDownloadManager = true }) {
                                 Icon(
                                     Icons.Default.Downloading,
-                                    contentDescription = "Gestionnaire de téléchargements",
+                                    contentDescription = "Téléchargements",
                                     tint = if (activeDownloads > 0) MaterialTheme.colorScheme.primary
                                     else MaterialTheme.colorScheme.onSurface
                                 )
@@ -149,21 +149,22 @@ fun Ps2StudioScreen(
                         }
 
                         if (uiState.selectedTab == Ps2Tab.GAMES) {
-                            // Layout toggle
+                            // ── Layout toggle ──────────────────────────────────
                             IconButton(onClick = {
                                 viewModel.setGameLayout(
-                                    if (uiState.gameLayout == GameLayout.LIST) GameLayout.GRID else GameLayout.LIST
+                                    if (uiState.gameLayout == GameLayout.LIST) GameLayout.GRID
+                                    else GameLayout.LIST
                                 )
                             }) {
                                 Icon(
                                     if (uiState.gameLayout == GameLayout.GRID) Icons.Default.ViewList
                                     else Icons.Default.GridView,
-                                    contentDescription = "Changer la disposition",
+                                    contentDescription = "Disposition",
                                     tint = MaterialTheme.colorScheme.onSurface
                                 )
                             }
 
-                            // Multi-select toggle
+                            // ── Multi-select toggle ────────────────────────────
                             IconButton(onClick = viewModel::toggleMultiSelectMode) {
                                 Icon(
                                     if (uiState.isMultiSelectMode) Icons.Default.Close
@@ -174,46 +175,114 @@ fun Ps2StudioScreen(
                                     else MaterialTheme.colorScheme.onSurface
                                 )
                             }
+
+                            // ── Batch convert (only when items selected) ───────
                             if (uiState.isMultiSelectMode && uiState.multiSelectedIds.isNotEmpty()) {
                                 IconButton(onClick = { showBatchDialog = true }) {
-                                    Icon(Icons.Default.Transform, contentDescription = "Convertir sélection",
-                                        tint = MaterialTheme.colorScheme.primary)
-                                }
-                            }
-
-                            var showSortMenu by remember { mutableStateOf(false) }
-                            IconButton(onClick = { showSortMenu = true }) {
-                                Icon(Icons.Default.Sort, contentDescription = "Trier")
-                            }
-                            DropdownMenu(expanded = showSortMenu, onDismissRequest = { showSortMenu = false }) {
-                                SortMode.entries.forEach { mode ->
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                when (mode) {
-                                                    SortMode.TITLE  -> "Par titre"
-                                                    SortMode.SIZE   -> "Par taille"
-                                                    SortMode.STATUS -> "Par statut"
-                                                },
-                                                fontWeight = if (uiState.sortMode == mode)
-                                                    FontWeight.Bold else FontWeight.Normal
-                                            )
-                                        },
-                                        onClick = { viewModel.setSortMode(mode); showSortMenu = false }
+                                    Icon(
+                                        Icons.Default.Transform,
+                                        contentDescription = "Convertir sélection",
+                                        tint = MaterialTheme.colorScheme.primary
                                     )
                                 }
                             }
-                            IconButton(onClick = viewModel::fetchAllCovers) {
-                                Icon(Icons.Default.Image, contentDescription = "Récupérer toutes les pochettes")
-                            }
-                            IconButton(onClick = { folderPickerLauncher.launch(null) }) {
-                                Icon(Icons.Default.FolderOpen, contentDescription = "Ajouter dossier")
-                            }
-                            IconButton(onClick = viewModel::scan) {
-                                if (uiState.isScanning) {
-                                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                                } else {
-                                    Icon(Icons.Default.Refresh, contentDescription = "Scanner")
+
+                            // ── Overflow menu ──────────────────────────────────
+                            var showOverflow by remember { mutableStateOf(false) }
+                            Box {
+                                IconButton(onClick = { showOverflow = true }) {
+                                    Icon(Icons.Default.MoreVert, contentDescription = "Plus d'options")
+                                }
+                                DropdownMenu(
+                                    expanded = showOverflow,
+                                    onDismissRequest = { showOverflow = false }
+                                ) {
+                                    // Sort submenu
+                                    var showSortMenu by remember { mutableStateOf(false) }
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                when (uiState.sortMode) {
+                                                    SortMode.TITLE  -> "Trier : Titre"
+                                                    SortMode.SIZE   -> "Trier : Taille"
+                                                    SortMode.STATUS -> "Trier : Statut"
+                                                }
+                                            )
+                                        },
+                                        leadingIcon = { Icon(Icons.Default.Sort, null) },
+                                        trailingIcon = { Icon(Icons.Default.ChevronRight, null) },
+                                        onClick = { showSortMenu = true }
+                                    )
+                                    DropdownMenu(
+                                        expanded = showSortMenu,
+                                        onDismissRequest = { showSortMenu = false }
+                                    ) {
+                                        SortMode.entries.forEach { mode ->
+                                            DropdownMenuItem(
+                                                text = {
+                                                    Text(
+                                                        when (mode) {
+                                                            SortMode.TITLE  -> "Par titre"
+                                                            SortMode.SIZE   -> "Par taille"
+                                                            SortMode.STATUS -> "Par statut"
+                                                        },
+                                                        fontWeight = if (uiState.sortMode == mode)
+                                                            FontWeight.Bold else FontWeight.Normal
+                                                    )
+                                                },
+                                                leadingIcon = if (uiState.sortMode == mode) ({
+                                                    Icon(Icons.Default.Check, null,
+                                                        tint = MaterialTheme.colorScheme.primary)
+                                                }) else null,
+                                                onClick = {
+                                                    viewModel.setSortMode(mode)
+                                                    showSortMenu = false
+                                                    showOverflow = false
+                                                }
+                                            )
+                                        }
+                                    }
+
+                                    HorizontalDivider()
+
+                                    // Fetch all covers
+                                    DropdownMenuItem(
+                                        text = { Text("Récupérer toutes les jaquettes") },
+                                        leadingIcon = { Icon(Icons.Default.Image, null) },
+                                        onClick = {
+                                            viewModel.fetchAllCovers()
+                                            showOverflow = false
+                                        }
+                                    )
+
+                                    // Add folder
+                                    DropdownMenuItem(
+                                        text = { Text("Ajouter un dossier") },
+                                        leadingIcon = { Icon(Icons.Default.FolderOpen, null) },
+                                        onClick = {
+                                            folderPickerLauncher.launch(null)
+                                            showOverflow = false
+                                        }
+                                    )
+
+                                    // Scan
+                                    DropdownMenuItem(
+                                        text = { Text("Scanner à nouveau") },
+                                        leadingIcon = {
+                                            if (uiState.isScanning) {
+                                                CircularProgressIndicator(
+                                                    modifier = Modifier.size(18.dp),
+                                                    strokeWidth = 2.dp
+                                                )
+                                            } else {
+                                                Icon(Icons.Default.Refresh, null)
+                                            }
+                                        },
+                                        onClick = {
+                                            viewModel.scan()
+                                            showOverflow = false
+                                        }
+                                    )
                                 }
                             }
                         }
@@ -336,7 +405,6 @@ fun Ps2StudioScreen(
         )
     }
 
-    // Delete confirmation dialog
     uiState.gameToDelete?.let { game ->
         AlertDialog(
             onDismissRequest = viewModel::dismissDeleteGame,
@@ -464,7 +532,6 @@ private fun GameListTab(
                 onPickFolder = onPickFolder
             )
         } else if (uiState.gameLayout == GameLayout.GRID) {
-            // 2×2 grid layout
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
                 contentPadding = PaddingValues(
@@ -491,12 +558,12 @@ private fun GameListTab(
                             else viewModel.toggleGameSelection(game)
                         },
                         onDeleteClick = { viewModel.requestDeleteGame(game) },
-                        onFetchCoverClick = { viewModel.fetchCover(game) }
+                        onFetchCoverClick = { viewModel.fetchCover(game) },
+                        onFetchCoverWithType = { type -> viewModel.fetchCoverWithType(game, type) }
                     )
                 }
             }
         } else {
-            // List layout
             LazyColumn(
                 state = scrollState,
                 contentPadding = PaddingValues(
@@ -544,7 +611,8 @@ private fun GameListTab(
                             onPauseClick = { viewModel.pauseConversion(game.isoPath) },
                             onResumeClick = { viewModel.resumeConversion(game.isoPath) },
                             onCancelClick = { viewModel.cancelConversion(game.isoPath) },
-                            onFetchCoverClick = { viewModel.fetchCover(game) }
+                            onFetchCoverClick = { viewModel.fetchCover(game) },
+                            onFetchCoverWithType = { type -> viewModel.fetchCoverWithType(game, type) }
                         )
                     }
                 }
@@ -589,9 +657,9 @@ private fun EmptyState(modifier: Modifier = Modifier, onPickFolder: () -> Unit) 
     }
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // Download Manager Bottom Sheet
-// ──────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -599,13 +667,20 @@ private fun DownloadManagerSheet(
     downloads: Map<String, com.usbdiskmanager.ps2.data.download.TgDownloadProgress>,
     onDismiss: () -> Unit
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+    // skipPartiallyExpanded = true → opens directly in full-screen, drag handle takes it all the way
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = sheetState
+        sheetState = sheetState,
+        dragHandle = { BottomSheetDefaults.DragHandle() }
     ) {
-        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .navigationBarsPadding()
+        ) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -648,9 +723,16 @@ private fun DownloadManagerSheet(
                     )
                     Spacer(Modifier.height(12.dp))
                     Text(
-                        "Aucun téléchargement",
+                        "Aucun téléchargement en cours",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Les téléchargements Telegram apparaîtront ici",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.outline,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
                     )
                 }
             } else {
@@ -707,7 +789,7 @@ private fun DownloadRow(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Icon(statusIcon, null, tint = statusColor, modifier = Modifier.size(18.dp))
+                Icon(statusIcon, null, tint = statusColor, modifier = Modifier.size(20.dp))
                 Text(
                     progress.fileName.ifBlank { downloadId.takeLast(20) },
                     style = MaterialTheme.typography.bodySmall,
@@ -716,30 +798,37 @@ private fun DownloadRow(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
                 )
-                if (progress.status == TgDownloadStatus.DOWNLOADING || progress.status == TgDownloadStatus.QUEUED) {
-                    Text(
-                        progress.speedFormatted,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFF0088CC),
-                        fontSize = 10.sp
-                    )
+                if (progress.status == TgDownloadStatus.DOWNLOADING) {
+                    Surface(
+                        color = Color(0xFF0088CC).copy(alpha = 0.12f),
+                        shape = RoundedCornerShape(4.dp)
+                    ) {
+                        Text(
+                            progress.speedFormatted,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFF0088CC),
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                        )
+                    }
                 }
             }
 
             if (progress.status == TgDownloadStatus.DOWNLOADING) {
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(8.dp))
                 LinearProgressIndicator(
                     progress = { progress.fraction },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(4.dp)
-                        .clip(RoundedCornerShape(2.dp)),
-                    color = Color(0xFF0088CC)
+                        .height(5.dp)
+                        .clip(RoundedCornerShape(3.dp)),
+                    color = Color(0xFF0088CC),
+                    trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
                 )
-                Spacer(Modifier.height(3.dp))
+                Spacer(Modifier.height(4.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
                         "%.1f%%".format(progress.fraction * 100),
@@ -750,18 +839,40 @@ private fun DownloadRow(
                         val eta = if (progress.etaSeconds > 60)
                             "${progress.etaSeconds / 60}m ${progress.etaSeconds % 60}s"
                         else "${progress.etaSeconds}s"
-                        Text("ETA $eta", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                        Text(
+                            "ETA $eta",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline
+                        )
                     }
                 }
+            } else if (progress.status == TgDownloadStatus.QUEUED) {
+                Spacer(Modifier.height(4.dp))
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp)),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+                )
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    "En attente...",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             } else if (progress.status == TgDownloadStatus.ERROR && progress.error != null) {
                 Spacer(Modifier.height(4.dp))
-                Text(
-                    progress.error,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.error,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Surface(
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    shape = RoundedCornerShape(6.dp)
+                ) {
+                    Text(
+                        progress.error,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
             }
         }
     }

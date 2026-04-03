@@ -166,8 +166,13 @@ class Ps2RepositoryImpl @Inject constructor(
     // Cover art
     // ─────────────────────────────────────────────────────────────────────────
 
-    override suspend fun fetchCoverArt(gameId: String, region: String, outputDir: String): String? {
-        val path = coverFetcher.fetchCover(gameId, region, IsoScanner.DEFAULT_ART_DIR)
+    override suspend fun fetchCoverArt(
+        gameId: String,
+        region: String,
+        outputDir: String,
+        coverType: com.usbdiskmanager.ps2.data.cover.CoverType
+    ): String? {
+        val path = coverFetcher.fetchCover(gameId, region, IsoScanner.DEFAULT_ART_DIR, coverType)
         if (path != null) {
             _games.update { list -> list.map { g -> if (g.gameId == gameId) g.copy(coverPath = path) else g } }
         }

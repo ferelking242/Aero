@@ -1,5 +1,14 @@
 # USB OTG Disk Manager — Android App (100% Kotlin)
 
+## Dernières modifications (2026-04-03)
+- **GameCard** : boutons Convertir / Sélectionner / Supprimer agrandis et déplacés en bas de la carte (texte + icône visible)
+- **PS2 Studio toolbar** : 7 boutons regroupés — 3 visibles (téléchargements, disposition, multi-sélection) + menu ⋮ overflow (tri, récupérer jaquettes, ajouter dossier, scanner)
+- **Gestionnaire téléchargements** : s'ouvre directement en plein écran (plus de drag bloqué) ; progression, vitesse et ETA améliorés
+- **Jaquettes PS2** : intégration du repo GitHub `xlenore/ps2-covers` comme source primaire ; sélection du type de cover (Standard/2D/3D) au clic sur la vignette
+- **FloatingNavDock** : converti en `NavigationBar` propre dans le Scaffold — ne bloque plus aucun bouton (CFG tab "Ajouter", etc.) ; animations améliorées (scale + spring)
+- **Shizuku** : bouton "Lancer Shizuku" dans le dialogue quand l'état est NotRunning — exécute le script de démarrage `start.sh` directement depuis l'app
+
+
 Projet Android natif — aucun Node.js, aucun TypeScript.
 
 ## Architecture

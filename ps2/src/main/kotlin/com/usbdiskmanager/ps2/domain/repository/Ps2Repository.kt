@@ -1,5 +1,6 @@
 package com.usbdiskmanager.ps2.domain.repository
 
+import com.usbdiskmanager.ps2.data.cover.CoverType
 import com.usbdiskmanager.ps2.domain.model.ConversionJob
 import com.usbdiskmanager.ps2.domain.model.ConversionProgress
 import com.usbdiskmanager.ps2.domain.model.Ps2Game
@@ -37,7 +38,12 @@ interface Ps2Repository {
     suspend fun cancelConversion(isoPath: String)
 
     /** Download cover art for a game and store locally. */
-    suspend fun fetchCoverArt(gameId: String, region: String, outputDir: String): String?
+    suspend fun fetchCoverArt(
+        gameId: String,
+        region: String,
+        outputDir: String,
+        coverType: CoverType = CoverType.DEFAULT
+    ): String?
 
     /** Get a game by its ISO path. */
     suspend fun getGame(isoPath: String): Ps2Game?

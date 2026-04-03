@@ -10,12 +10,15 @@ import com.usbdiskmanager.shizuku.ShizukuManager
 import com.usbdiskmanager.shizuku.ShizukuState
 import com.usbdiskmanager.usb.api.UsbDeviceRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import timber.log.Timber
 import javax.inject.Inject
 
 data class DashboardUiState(
@@ -144,5 +147,47 @@ class DashboardViewModel @Inject constructor(
 
     fun clearError() {
         _uiState.value = _uiState.value.copy(errorMessage = null, operationMessage = null)
+    }
+
+    /**
+     * Launch Shizuku service by running its start script directly via shell.
+     * Equivalent to: adb shell sh /storage/emulated/0/Android/data/moe.shizuku.privileged.api/start.sh
+     */
+    fun launchShizukuViaShell() {
+        viewModelScope.launch {
+            logManager.log("Lancement Shizuku via script…")
+            val cmd = "sh /storage/emulated/0/Android/data/moe.shizuku.privileged.api/start.sh"
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    val process = Runtime.getRuntime().exec(arrayOf("/system/bin/sh", "-c", cmd))
+                    val stdout = process.inputStream.bufferedReader().readText().trim()
+                    val stderr = process.errorStream.bufferedReader().readText().trim()
+                    val exit = process.waitFor()
+                    Triple(exit, stdout, stderr)
+                }
+                val (exit, stdout, stderr) = result
+                if (exit == 0) {
+                    logManager.log("Shizuku lancé avec succès ✓")
+                    _uiState.value = _uiState.value.copy(
+                        operationMessage = "Shizuku lancé. Vérifiez dans quelques secondes."
+                    )
+                    // Re-check Shizuku state after a short delay
+                    kotlinx.coroutines.delay(2000)
+                    shizukuManager.initialize()
+                } else {
+                    val msg = stderr.ifBlank { stdout }.ifBlank { "Exit code $exit" }
+                    logManager.log("Échec lancement Shizuku: $msg")
+                    _uiState.value = _uiState.value.copy(
+                        errorMessage = "Échec: $msg\n\nAssurez-vous que Shizuku est installé."
+                    )
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "launchShizukuViaShell failed")
+                logManager.log("Erreur lancement Shizuku: ${e.message}")
+                _uiState.value = _uiState.value.copy(
+                    errorMessage = "Erreur: ${e.message}"
+                )
+            }
+        }
     }
 }

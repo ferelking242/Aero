@@ -1,9 +1,12 @@
 package com.usbdiskmanager.ps2.ui.components
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -20,6 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -29,55 +33,65 @@ import androidx.compose.ui.unit.sp
 
 enum class AppTab { USB, PS2_STUDIO }
 
+/**
+ * A pill-shaped floating navigation dock rendered as a proper NavigationBar
+ * so it does NOT overlap content. Used inside Scaffold's bottomBar.
+ */
 @Composable
 fun FloatingNavDock(
     currentTab: AppTab,
     onTabSelected: (AppTab) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 40.dp, vertical = 12.dp),
-        contentAlignment = Alignment.Center
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = Color.Transparent,
+        tonalElevation = 0.dp
     ) {
         Box(
             modifier = Modifier
-                .shadow(
-                    elevation = 24.dp,
-                    shape = RoundedCornerShape(50),
-                    ambientColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
-                    spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
-                )
-                .clip(RoundedCornerShape(50))
-                .background(
-                    brush = Brush.linearGradient(
-                        colors = listOf(
-                            MaterialTheme.colorScheme.surfaceContainer,
-                            MaterialTheme.colorScheme.surfaceContainerHigh
+                .fillMaxWidth()
+                .padding(horizontal = 32.dp, vertical = 10.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .shadow(
+                        elevation = 20.dp,
+                        shape = RoundedCornerShape(50),
+                        ambientColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
+                        spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
+                    )
+                    .clip(RoundedCornerShape(50))
+                    .background(
+                        brush = Brush.linearGradient(
+                            colors = listOf(
+                                MaterialTheme.colorScheme.surfaceContainer,
+                                MaterialTheme.colorScheme.surfaceContainerHigh
+                            )
                         )
                     )
-                )
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically
             ) {
-                DockTab(
-                    label = "USB",
-                    icon = Icons.Default.SdStorage,
-                    selected = currentTab == AppTab.USB,
-                    accentColor = MaterialTheme.colorScheme.primary,
-                    onClick = { onTabSelected(AppTab.USB) }
-                )
-                DockTab(
-                    label = "PS2 Studio",
-                    icon = Icons.Default.VideogameAsset,
-                    selected = currentTab == AppTab.PS2_STUDIO,
-                    accentColor = Color(0xFF7C4DFF),
-                    onClick = { onTabSelected(AppTab.PS2_STUDIO) }
-                )
+                Row(
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 5.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    DockTab(
+                        label = "USB",
+                        icon = Icons.Default.SdStorage,
+                        selected = currentTab == AppTab.USB,
+                        accentColor = MaterialTheme.colorScheme.primary,
+                        onClick = { onTabSelected(AppTab.USB) }
+                    )
+                    DockTab(
+                        label = "PS2 Studio",
+                        icon = Icons.Default.VideogameAsset,
+                        selected = currentTab == AppTab.PS2_STUDIO,
+                        accentColor = Color(0xFF7C4DFF),
+                        onClick = { onTabSelected(AppTab.PS2_STUDIO) }
+                    )
+                }
             }
         }
     }
@@ -91,7 +105,7 @@ private fun DockTab(
     accentColor: Color,
     onClick: () -> Unit
 ) {
-    val bgAlpha by animateColorAsState(
+    val bgColor by animateColorAsState(
         targetValue = if (selected) accentColor else Color.Transparent,
         animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
         label = "bg"
@@ -106,11 +120,17 @@ private fun DockTab(
         animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
         label = "pad"
     )
+    val scale by animateFloatAsState(
+        targetValue = if (selected) 1f else 0.93f,
+        animationSpec = tween(200, easing = FastOutSlowInEasing),
+        label = "scale"
+    )
 
     Box(
         modifier = Modifier
+            .scale(scale)
             .clip(RoundedCornerShape(50))
-            .background(bgAlpha)
+            .background(bgColor)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -127,7 +147,7 @@ private fun DockTab(
                 imageVector = icon,
                 contentDescription = label,
                 tint = contentColor,
-                modifier = Modifier.size(19.dp)
+                modifier = Modifier.size(20.dp)
             )
             if (selected) {
                 Text(

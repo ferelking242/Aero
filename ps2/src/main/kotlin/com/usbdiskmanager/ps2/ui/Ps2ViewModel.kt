@@ -4,6 +4,7 @@ import android.net.Uri
 import android.os.Environment
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.usbdiskmanager.ps2.data.cover.CoverType
 import com.usbdiskmanager.ps2.data.IsoSearchService
 import com.usbdiskmanager.ps2.data.Ps2RepositoryImpl
 import com.usbdiskmanager.ps2.data.converter.UlCfgManager
@@ -749,6 +750,12 @@ class Ps2ViewModel @Inject constructor(
     fun fetchCover(game: Ps2Game) {
         viewModelScope.launch {
             repository.fetchCoverArt(game.gameId, game.region, IsoScanner.DEFAULT_ART_DIR)
+        }
+    }
+
+    fun fetchCoverWithType(game: Ps2Game, coverType: CoverType) {
+        viewModelScope.launch {
+            repository.fetchCoverArt(game.gameId, game.region, IsoScanner.DEFAULT_ART_DIR, coverType)
         }
     }
 

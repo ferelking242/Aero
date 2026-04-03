@@ -1,9 +1,9 @@
 package com.usbdiskmanager.ui.navigation
 
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -49,10 +49,35 @@ fun AppNavHost(
         else                    -> AppTab.USB
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    val showDock = currentRoute in DOCK_ROUTES
+
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        bottomBar = {
+            if (showDock) {
+                FloatingNavDock(
+                    currentTab = currentTab,
+                    onTabSelected = { tab ->
+                        val route = when (tab) {
+                            AppTab.USB        -> Screen.Dashboard.route
+                            AppTab.PS2_STUDIO -> Screen.Ps2Studio.route
+                        }
+                        if (currentRoute != route) {
+                            navController.navigate(route) {
+                                popUpTo(Screen.Dashboard.route) { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }
+                    }
+                )
+            }
+        }
+    ) { innerPadding ->
         NavHost(
             navController = navController,
-            startDestination = Screen.Dashboard.route
+            startDestination = Screen.Dashboard.route,
+            modifier = Modifier.padding(innerPadding)
         ) {
             composable(Screen.Dashboard.route) {
                 DashboardScreen(
@@ -111,26 +136,6 @@ fun AppNavHost(
             composable(Screen.Settings.route) {
                 SettingsScreen(onNavigateUp = { navController.popBackStack() })
             }
-        }
-
-        if (currentRoute in DOCK_ROUTES) {
-            FloatingNavDock(
-                currentTab = currentTab,
-                onTabSelected = { tab ->
-                    val route = when (tab) {
-                        AppTab.USB        -> Screen.Dashboard.route
-                        AppTab.PS2_STUDIO -> Screen.Ps2Studio.route
-                    }
-                    if (currentRoute != route) {
-                        navController.navigate(route) {
-                            popUpTo(Screen.Dashboard.route) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    }
-                },
-                modifier = Modifier.align(Alignment.BottomCenter)
-            )
         }
     }
 }

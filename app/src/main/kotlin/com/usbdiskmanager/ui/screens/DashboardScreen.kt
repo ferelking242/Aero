@@ -57,6 +57,10 @@ fun DashboardScreen(
                 viewModel.requestShizukuPermission()
                 showShizukuDialog = false
             },
+            onLaunchShizuku = {
+                viewModel.launchShizukuViaShell()
+                showShizukuDialog = false
+            },
             onDismiss = { showShizukuDialog = false }
         )
     }
@@ -233,6 +237,7 @@ private fun ShizukuCatButton(
 private fun ShizukuQuickDialog(
     state: ShizukuState,
     onRequestPermission: () -> Unit,
+    onLaunchShizuku: () -> Unit,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -250,7 +255,7 @@ private fun ShizukuQuickDialog(
         title = { Text("Shizuku") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                // Status
+                // Status indicator
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     val (color, label) = when (state) {
                         is ShizukuState.Ready ->
@@ -290,6 +295,35 @@ private fun ShizukuQuickDialog(
                         }
                     }
                 }
+
+                // When Shizuku is not running, show the launch via ADB script option
+                if (state is ShizukuState.NotRunning) {
+                    HorizontalDivider()
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            "Démarrer Shizuku automatiquement :",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Button(
+                            onClick = onLaunchShizuku,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF7C4DFF)
+                            )
+                        ) {
+                            Icon(Icons.Default.PlayArrow, null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Lancer Shizuku")
+                        }
+                        Text(
+                            "Exécute le script de démarrage Shizuku",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 10.sp
+                        )
+                    }
+                }
             }
         },
         confirmButton = {
@@ -297,7 +331,7 @@ private fun ShizukuQuickDialog(
                 Button(onClick = onRequestPermission) {
                     Text(stringResource(R.string.shizuku_grant))
                 }
-            } else if (state is ShizukuState.NotInstalled || state is ShizukuState.NotRunning) {
+            } else if (state is ShizukuState.NotInstalled) {
                 Button(onClick = {
                     try {
                         val uri = Uri.parse("https://play.google.com/store/apps/details?id=moe.shizuku.privileged.api")
